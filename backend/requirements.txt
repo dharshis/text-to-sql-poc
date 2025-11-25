@@ -1,0 +1,18 @@
+# Text-to-SQL POC - Backend Dependencies
+# Python 3.13.9
+
+# Database
+SQLAlchemy==2.0.36
+
+# Data Generation
+Faker==33.1.0
+
+# Web Framework
+Flask==3.1.0
+flask-cors==5.0.0
+
+# Claude AI Integration
+anthropic==0.40.0
+
+# Configuration
+python-dotenv==1.0.1

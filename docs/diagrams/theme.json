@@ -1,0 +1,31 @@
+{
+  "name": "Professional",
+  "colors": {
+    "frontend": {
+      "fill": "#e3f2fd",
+      "stroke": "#1976d2"
+    },
+    "backend": {
+      "fill": "#fff3e0",
+      "stroke": "#f57c00"
+    },
+    "database": {
+      "fill": "#e8f5e9",
+      "stroke": "#388e3c"
+    },
+    "external": {
+      "fill": "#f3e5f5",
+      "stroke": "#7b1fa2"
+    },
+    "validator": {
+      "fill": "#fff9c4",
+      "stroke": "#f9a825"
+    },
+    "user": {
+      "fill": "#f5f5f5",
+      "stroke": "#616161"
+    },
+    "arrow": "#1976d2",
+    "text": "#1e1e1e"
+  }
+}
