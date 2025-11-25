@@ -49,7 +49,7 @@ const SqlDisplay = ({ sql }) => {
     let highlighted = query;
 
     // Replace keywords
-    highlighted = highlighted.replace(keywords, '<span style="color: #1976d2; font-weight: 600">$1</span>');
+    highlighted = highlighted.replace(keywords, '<span style="color: #1976d2; font-weight: bold">$1</span>');
 
     // Replace strings
     highlighted = highlighted.replace(strings, '<span style="color: #4caf50">$1</span>');

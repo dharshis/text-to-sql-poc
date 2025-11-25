@@ -178,15 +178,15 @@ def generate_sales(client_ids, product_ids):
     Generate ~2000 sales records with temporal patterns.
 
     Patterns:
-    - Date range: 2023-01-01 to 2024-12-31
+    - Date range: 2024-01-01 to 2025-11-30
     - Q4 (Oct-Dec) has 1.5x higher volume (holiday season)
     - Random regional distribution
     - Quantity: 1-50 units per sale
     - Revenue: quantity * product price
     """
     sales = []
-    start_date = datetime(2023, 1, 1)
-    end_date = datetime(2024, 12, 31)
+    start_date = datetime(2024, 1, 1)
+    end_date = datetime(2025, 11, 30)
     date_range = (end_date - start_date).days
 
     # Generate sales with Q4 seasonality
