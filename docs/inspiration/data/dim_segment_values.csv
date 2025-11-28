@@ -1,0 +1,36 @@
+segment_value_id,segment_type_id,value_name,description
+SV-01,ST-01,Passenger Cars,Private vehicles including sedans and SUVs
+SV-02,ST-01,Commercial Vehicles,Buses, trucks, and vans
+SV-03,ST-01,Two-Wheelers,Electric motorcycles and scooters
+SV-04,ST-01,Three-Wheelers,Electric rickshaws and trikes
+SV-05,ST-02,BEV,Battery Electric Vehicles (Full Electric)
+SV-06,ST-02,PHEV,Plug-in Hybrid Electric Vehicles
+SV-07,ST-02,FCEV,Fuel Cell Electric Vehicles (Hydrogen)
+SV-08,ST-03,Lithium-Ion (NMC),Nickel Manganese Cobalt
+SV-09,ST-03,Lithium-Ion (LFP),Lithium Iron Phosphate
+SV-10,ST-03,Solid State,Next-gen battery technology
+SV-11,ST-03,Lead-Acid,Legacy battery technology
+SV-12,ST-03,Sodium-Ion,Emerging low-cost chemistry
+SV-13,ST-04,Level 1 (AC),Standard household outlet charging
+SV-14,ST-04,Level 2 (AC),Dedicated AC charging stations
+SV-15,ST-04,Level 3 (DC Fast),Direct Current fast charging (50-350kW)
+SV-16,ST-05,AWD,All-Wheel Drive
+SV-17,ST-05,FWD,Front-Wheel Drive
+SV-18,ST-05,RWD,Rear-Wheel Drive
+SV-19,ST-06,Residential,Home installation
+SV-20,ST-06,Commercial,Public stations, malls, offices
+SV-21,ST-06,Fleet,Depot charging for logistics
+SV-22,ST-07,CCS (Combined Charging System),Standard for NA and EU
+SV-23,ST-07,CHAdeMO,Japanese standard
+SV-24,ST-07,GB/T,Chinese standard
+SV-25,ST-07,NACS (Tesla),North American Charging Standard
+SV-26,ST-08,AC Induction,Asynchronous motors
+SV-27,ST-08,Permanent Magnet Synchronous,High efficiency motors using rare earth magnets
+SV-28,ST-09,Economy,Mass market vehicles
+SV-29,ST-09,Luxury,Premium vehicles >$60k
+SV-30,ST-01,Electric Buses,Public transport buses
+SV-31,ST-01,Electric Trucks,Heavy duty freight trucks
+SV-32,ST-04,Wireless Charging,Inductive charging technology
+SV-33,ST-02,HEV,Hybrid Electric Vehicle (Non-plugin)
+SV-34,ST-08,Switched Reluctance Motor,Rare-earth free motor design
+SV-35,ST-01,Micro-mobility,E-bikes and kick scooters

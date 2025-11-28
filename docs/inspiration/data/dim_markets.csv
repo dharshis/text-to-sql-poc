@@ -1,0 +1,13 @@
+market_id,market_name,parent_market_id,definition,naics_code
+MKT-100,Automotive,,All vehicles and components,3361
+MKT-101,Electric Vehicles,MKT-100,Vehicles using one or more electric motors for propulsion,336110
+MKT-102,EV Batteries,MKT-101,Rechargeable batteries used for electric vehicles,33591
+MKT-103,EV Charging Infrastructure,MKT-101,Public and private charging stations and hardware,335999
+MKT-104,Electric Motors,MKT-101,Traction motors for EV propulsion,335312
+MKT-105,Power Electronics,MKT-101,Inverters, converters, and controllers for EVs,334413
+MKT-106,Battery Management Systems (BMS),MKT-102,Electronic systems that manage a rechargeable battery,33451
+MKT-107,On-Board Chargers (OBC),MKT-105,Device converting AC grid power to DC for battery charging,334419
+MKT-108,E-Axle,MKT-104,Integrated electric drive unit comprising motor, inverter and transmission,336350
+MKT-109,Thermal Management Systems,MKT-101,Systems regulating temperature for battery and motor efficiency,333415
+MKT-110,Fuel Cell Electric Vehicles (FCEV),MKT-101,Vehicles powered by hydrogen fuel cells,336120
+MKT-111,EV Tires,MKT-100,Tires specifically designed for the weight and torque of EVs,326211

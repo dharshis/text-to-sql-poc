@@ -9,10 +9,12 @@ Provides endpoints for:
 
 import logging
 import time
+import uuid
 from flask import Blueprint, request, jsonify
 from services.claude_service import ClaudeService
 from services.query_executor import QueryExecutor
 from services.sql_validator import validate_sql_for_client_isolation, get_validation_summary
+from services.agentic_text2sql_service import AgenticText2SQLService
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,7 @@ query_bp = Blueprint('query', __name__)
 # Initialize services
 claude_service = ClaudeService()
 query_executor = QueryExecutor()
+agentic_service = AgenticText2SQLService()
 
 
 @query_bp.route('/query', methods=['POST'])
@@ -150,39 +153,98 @@ def execute_query():
         }), 500
 
 
-@query_bp.route('/clients', methods=['GET'])
-def get_clients():
+@query_bp.route('/query-agentic', methods=['POST'])
+def execute_agentic_query():
     """
-    Get list of all available clients.
-
-    Response:
+    Agentic text-to-SQL endpoint with enhanced capabilities.
+    Architecture Reference: Section 8.1 (API Design)
+    
+    Request Body:
         {
-            "clients": [
-                {"client_id": 1, "client_name": "Webb Inc", "industry": "Retail"},
-                ...
-            ],
-            "count": 10
+            "query": "Show me top products",
+            "session_id": "uuid",
+            "client_id": 1,
+            "max_iterations": 10
         }
-
-    Error Response:
+    
+    Response (Success):
         {
-            "error": "Error message"
+            "success": true,
+            "sql": "SELECT...",
+            "explanation": "Natural language insights...",
+            "results": {...},
+            "validation": {...},
+            "reflection": {...},
+            "iterations": 7,
+            "method": "agentic"
+        }
+    
+    Response (Clarification):
+        {
+            "success": false,
+            "needs_clarification": true,
+            "questions": ["Which time period?", "..."],
+            "method": "agentic"
         }
     """
+    start_time = time.time()
+    
     try:
-        clients = query_executor.get_clients()
-
-        return jsonify({
-            'clients': clients,
-            'count': len(clients)
-        }), 200
-
+        from datasets.active_dataset import get_active_dataset
+        
+        data = request.json
+        user_query = data.get('query')
+        session_id = data.get('session_id', str(uuid.uuid4()))
+        client_id = data.get('client_id', 1)
+        max_iterations = data.get('max_iterations', 10)
+        
+        # Get active dataset from backend configuration (not frontend)
+        dataset_id = get_active_dataset()
+        
+        # Input validation (Architecture Section 12.3)
+        if not user_query:
+            return jsonify({'error': 'Query is required'}), 400
+        
+        if len(user_query) > 1000:
+            return jsonify({'error': 'Query too long (max 1000 chars)'}), 400
+        
+        if max_iterations < 1 or max_iterations > 15:
+            return jsonify({'error': 'max_iterations must be 1-15'}), 400
+        
+        logger.info(f"Agentic query: session={session_id}, client={client_id}, dataset={dataset_id}, query='{user_query[:100]}'")
+        
+        # Call agentic service (Architecture Section 3.1 + Backend Dataset Config)
+        result = agentic_service.generate_sql_with_agent(
+            user_query=user_query,
+            session_id=session_id,
+            client_id=client_id,
+            dataset_id=dataset_id,
+            max_iterations=max_iterations
+        )
+        
+        elapsed = time.time() - start_time
+        logger.info(f"Agentic query completed in {elapsed:.2f}s, success={result.get('success')}")
+        
+        # Performance warning (Architecture Section 13.1)
+        if elapsed > 10.0:
+            logger.warning(f"Query exceeded 10s performance target: {elapsed:.2f}s")
+        
+        return jsonify(result), 200
+        
     except Exception as e:
-        logger.error(f"Error in /clients endpoint: {e}", exc_info=True)
+        logger.error(f"Agentic query error: {e}", exc_info=True)
         return jsonify({
-            'error': 'Failed to fetch clients',
-            'details': str(e)
+            'success': False,
+            'error': str(e),
+            'method': 'agentic'
         }), 500
+
+
+# OLD ENDPOINT REMOVED - Now using dataset-aware endpoint below
+# @query_bp.route('/clients', methods=['GET'])
+# def get_clients():
+#     """DEPRECATED: Replaced by dataset-aware list_clients() endpoint"""
+#     pass
 
 
 @query_bp.route('/health', methods=['GET'])
@@ -255,5 +317,255 @@ def get_schema():
         logger.error(f"Error in /schema endpoint: {e}", exc_info=True)
         return jsonify({
             'error': 'Failed to fetch schema',
+            'details': str(e)
+        }), 500
+
+
+@query_bp.route('/datasets', methods=['GET'])
+def list_datasets():
+    """
+    List all available datasets.
+    
+    Response:
+        {
+            "datasets": [
+                {
+                    "id": "sales",
+                    "name": "Sales Transactions",
+                    "description": "...",
+                    "schema_type": "transactional",
+                    "sample_queries": [...]
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        from datasets.dataset_config import list_datasets as get_datasets
+        from datasets.active_dataset import get_active_dataset
+        
+        datasets = get_datasets()
+        active_dataset = get_active_dataset()
+        
+        return jsonify({
+            'datasets': datasets,
+            'active_dataset': active_dataset
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error listing datasets: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to list datasets',
+            'details': str(e)
+        }), 500
+
+
+@query_bp.route('/dataset/active', methods=['GET'])
+def get_active_dataset_endpoint():
+    """
+    Get the currently active dataset.
+    
+    Response:
+        {
+            "active_dataset": "sales",
+            "dataset_info": {...}
+        }
+    """
+    try:
+        from datasets.active_dataset import get_active_dataset, get_active_dataset_info
+        
+        dataset_id = get_active_dataset()
+        dataset_info = get_active_dataset_info()
+        
+        return jsonify({
+            'active_dataset': dataset_id,
+            'dataset_info': dataset_info
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error getting active dataset: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to get active dataset',
+            'details': str(e)
+        }), 500
+
+
+@query_bp.route('/clients', methods=['GET'])
+def list_clients():
+    """
+    List all clients from the active dataset.
+    
+    Response:
+        {
+            "clients": [
+                {
+                    "client_id": 1,
+                    "client_name": "Acme Corporation",
+                    "industry": "Manufacturing",
+                    "subscription_tier": "Enterprise",
+                    "is_active": 1
+                },
+                ...
+            ],
+            "dataset": "market_size"
+        }
+    """
+    try:
+        from datasets.active_dataset import get_active_dataset, get_active_dataset_info
+        import sqlite3
+        
+        dataset_id = get_active_dataset()
+        dataset_info = get_active_dataset_info()
+        db_path = dataset_info['db_path']
+        
+        # Check if dim_clients exists in the dataset
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Check if table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dim_clients'")
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({
+                'clients': [],
+                'dataset': dataset_id,
+                'message': 'No client dimension in this dataset'
+            }), 200
+        
+        # Fetch all active clients
+        cursor.execute("""
+            SELECT 
+                client_id,
+                client_name,
+                industry,
+                region,
+                subscription_tier,
+                data_access_level,
+                max_users,
+                account_manager,
+                is_active
+            FROM dim_clients
+            WHERE is_active = 1
+            ORDER BY client_name
+        """)
+        
+        clients = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        logger.info(f"Retrieved {len(clients)} clients from {dataset_id}")
+        
+        return jsonify({
+            'clients': clients,
+            'dataset': dataset_id
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error listing clients: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to list clients',
+            'details': str(e)
+        }), 500
+
+
+@query_bp.route('/dataset/active', methods=['POST'])
+def set_active_dataset_endpoint():
+    """
+    Switch the active dataset (backend configuration).
+    
+    Request Body:
+        {
+            "dataset_id": "market_size"
+        }
+    
+    Response:
+        {
+            "success": true,
+            "active_dataset": "market_size",
+            "message": "Active dataset changed to market_size"
+        }
+    """
+    try:
+        from datasets.active_dataset import set_active_dataset, get_active_dataset_info
+        
+        data = request.json
+        dataset_id = data.get('dataset_id')
+        
+        if not dataset_id:
+            return jsonify({
+                'success': False,
+                'error': 'dataset_id is required'
+            }), 400
+        
+        # Set active dataset
+        success = set_active_dataset(dataset_id)
+        
+        if success:
+            dataset_info = get_active_dataset_info()
+            logger.info(f"✓ Active dataset changed to: {dataset_id}")
+            
+            return jsonify({
+                'success': True,
+                'active_dataset': dataset_id,
+                'dataset_info': dataset_info,
+                'message': f"Active dataset changed to {dataset_id}"
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': f"Invalid dataset_id: {dataset_id}"
+            }), 400
+    
+    except Exception as e:
+        logger.error(f"Error setting active dataset: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'Failed to set active dataset',
+            'details': str(e)
+        }), 500
+
+
+@query_bp.route('/session/<session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    """
+    Delete a session and all its conversation history.
+    
+    This ensures complete memory cleanup when starting a new session.
+    
+    Path Parameters:
+        session_id: The session ID to delete
+        
+    Response:
+        {
+            "success": true,
+            "message": "Session deleted",
+            "session_id": "session-..."
+        }
+    """
+    try:
+        # Check if session exists
+        if session_id in agentic_service.chat_sessions:
+            query_count = len(agentic_service.chat_sessions[session_id])
+            del agentic_service.chat_sessions[session_id]
+            logger.info(f"Session {session_id} deleted ({query_count} queries cleared)")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Session deleted',
+                'session_id': session_id,
+                'queries_cleared': query_count
+            }), 200
+        else:
+            logger.info(f"Session {session_id} not found (already cleared or never existed)")
+            return jsonify({
+                'success': True,
+                'message': 'Session not found or already cleared',
+                'session_id': session_id
+            }), 200
+    
+    except Exception as e:
+        logger.error(f"Error deleting session {session_id}: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to delete session',
             'details': str(e)
         }), 500

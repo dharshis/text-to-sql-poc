@@ -312,6 +312,7 @@ text-to-sql-poc/
 **Backend:**
 - Flask 3.0.0
 - Anthropic Claude API (claude-3-5-sonnet)
+- LangGraph 1.0+ (agentic workflows)
 - SQLite
 - Python 3.8+
 

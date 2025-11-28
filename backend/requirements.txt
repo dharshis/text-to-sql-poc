@@ -14,5 +14,8 @@ flask-cors==5.0.0
 # Claude AI Integration
 anthropic==0.40.0
 
+# LangGraph for Agentic Workflows
+langgraph>=0.0.20
+
 # Configuration
 python-dotenv==1.0.1

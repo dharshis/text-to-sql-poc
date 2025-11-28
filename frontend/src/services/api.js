@@ -108,9 +108,74 @@ export const fetchSchema = async () => {
   }
 };
 
+/**
+ * Submit a natural language query to the agentic endpoint.
+ * Architecture Reference: Section 9.3 (Frontend State Management)
+ * 
+ * @param {string} query - Natural language query
+ * @param {string} sessionId - Session ID for conversation context
+ * @param {number} clientId - Client ID for data filtering
+ * @param {number} maxIterations - Maximum iterations for agent workflow
+ * @returns {Promise<Object>} Agentic query results with explanation, reflection, etc.
+ * @throws {Error} If API call fails
+ */
+export const executeAgenticQuery = async (query, sessionId, clientId = 1, maxIterations = 10) => {
+  try {
+    const response = await apiClient.post('/query-agentic', {
+      query,
+      session_id: sessionId,
+      client_id: clientId,
+      max_iterations: maxIterations,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error executing agentic query:', error);
+
+    // Extract error message from response
+    const errorMessage = error.response?.data?.error ||
+                        error.response?.data?.message ||
+                        'Agentic query failed. Please try again.';
+
+    const errorDetails = error.response?.data?.details || '';
+
+    // Return error data if available
+    if (error.response?.data) {
+      throw {
+        message: errorMessage,
+        details: errorDetails,
+        data: error.response.data,
+        isApiError: true
+      };
+    }
+
+    throw new Error(errorMessage);
+  }
+};
+
+/**
+ * Delete a session and all its conversation history from backend.
+ * Session Memory Feature: Ensures complete cleanup when starting new session.
+ * 
+ * @param {string} sessionId - Session ID to delete
+ * @returns {Promise<Object>} Deletion confirmation
+ * @throws {Error} If API call fails
+ */
+export const deleteSession = async (sessionId) => {
+  try {
+    const response = await apiClient.delete(`/session/${sessionId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting session:', error);
+    // Don't throw - session might not exist, that's okay
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   fetchClients,
   submitQuery,
   checkHealth,
   fetchSchema,
+  executeAgenticQuery,
+  deleteSession,
 };

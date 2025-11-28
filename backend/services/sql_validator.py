@@ -35,9 +35,9 @@ class ValidationResult:
         }
 
 
-def validate_sql_for_client_isolation(sql_query, expected_client_id):
+def validate_sql_for_client_isolation(sql_query, expected_client_id, dataset_config=None):
     """
-    Validate SQL query for client data isolation.
+    Validate SQL query for client data isolation (dataset-aware).
 
     This performs basic string-based validation for POC demonstration.
     In production, use a proper SQL parser (sqlparse, pglast, etc.).
@@ -45,6 +45,7 @@ def validate_sql_for_client_isolation(sql_query, expected_client_id):
     Args:
         sql_query (str): SQL query to validate
         expected_client_id (int): Expected client ID that should be filtered
+        dataset_config (dict, optional): Dataset configuration with table info
 
     Returns:
         ValidationResult: Validation results with checks and warnings
@@ -53,10 +54,15 @@ def validate_sql_for_client_isolation(sql_query, expected_client_id):
         1. Client ID Filter - Ensures WHERE client_id = {expected_client_id} is present
         2. Single Client - Ensures no other client IDs are referenced
         3. Read-Only - Ensures no destructive SQL operations (DROP, DELETE, UPDATE, etc.)
+        
+    Dataset-Aware Features:
+        - Validates based on dataset's fact tables (if config provided)
+        - Checks client isolation on correct tables
+        - Provides dataset-specific error messages
     """
     start_time = time.time()
 
-    logger.info(f"Validating SQL for client_id={expected_client_id}")
+    logger.info(f"Validating SQL for client_id={expected_client_id}, dataset={dataset_config.get('name') if dataset_config else 'unknown'}")
 
     checks = []
     warnings = []

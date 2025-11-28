@@ -108,7 +108,7 @@ class ClaudeService:
 
         logger.info(f"Claude service initialized with model: {self.model}")
 
-    def generate_sql(self, natural_language_query, client_id, client_name=None):
+    def generate_sql(self, natural_language_query, client_id, client_name=None, custom_schema=None):
         """
         Generate SQL query from natural language using Claude API.
 
@@ -116,6 +116,7 @@ class ClaudeService:
             natural_language_query (str): User's natural language query
             client_id (int): Client ID for data isolation
             client_name (str, optional): Client name for additional context
+            custom_schema (str, optional): Custom database schema (overrides default)
 
         Returns:
             str: Generated SQL query
@@ -138,13 +139,31 @@ Natural Language Query: {natural_language_query}
 
 Generate the SQL query:"""
 
+        # Use custom schema if provided, otherwise use default
+        schema_to_use = custom_schema if custom_schema else DATABASE_SCHEMA
+        system_prompt = f"""You are an expert SQL query generator for SQLite databases.
+You specialize in retail market research data analysis.
+
+DATABASE SCHEMA:
+{schema_to_use}
+
+CRITICAL RULES:
+1. ALWAYS include "WHERE client_id = {{client_id}}" in your queries to enforce data isolation
+2. Use ONLY the tables and columns defined in the schema above
+3. Generate valid SQLite syntax
+4. Return ONLY the SQL query without explanations
+5. Use proper JOINs when querying across multiple tables
+6. Always filter by the provided client_id in WHERE clauses
+
+Generate clean, efficient SQL queries based on the user's natural language input."""
+
         try:
             # Call Claude API
             message = self.client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 timeout=self.timeout,
-                system=SYSTEM_PROMPT.replace('{{client_id}}', str(client_id)),
+                system=system_prompt.replace('{{client_id}}', str(client_id)),
                 messages=[
                     {"role": "user", "content": user_prompt}
                 ]
