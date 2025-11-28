@@ -867,7 +867,8 @@ Respond in JSON format:
                 natural_language_query=query,
                 client_id=state.get("client_id", 1),
                 client_name=state.get("client_name"),
-                custom_schema=schema  # Use schema from active dataset
+                custom_schema=schema,  # Use schema from active dataset
+                dataset_id=state.get("dataset_id", "sales")  # Pass dataset for filtering instructions
             )
             
             # Extract clean SQL (Architecture Section 5.3)
@@ -1373,11 +1374,11 @@ Write as if explaining to a non-technical business user."""
         logger.info(f"Retrieving database schema for dataset: {dataset_id}...")
         
         try:
-            from datasets.dataset_config import get_dataset
+            from config import Config
             import sqlite3
             
             # Get dataset configuration
-            dataset_config = get_dataset(dataset_id)
+            dataset_config = Config.get_dataset(dataset_id)
             db_path = dataset_config['db_path']
             
             # Dynamically fetch schema from database
@@ -1459,10 +1460,10 @@ Write as if explaining to a non-technical business user."""
         
         try:
             from services.query_executor import QueryExecutor
-            from datasets.dataset_config import get_dataset
+            from config import Config
             
             # Get dataset configuration and database path
-            dataset_config = get_dataset(dataset_id)
+            dataset_config = Config.get_dataset(dataset_id)
             db_path = dataset_config['db_path']
             
             # Use QueryExecutor with dataset-specific database
@@ -1535,10 +1536,10 @@ Write as if explaining to a non-technical business user."""
         
         try:
             from services.sql_validator import validate_sql_for_client_isolation
-            from datasets.dataset_config import get_dataset
+            from config import Config
             
             # Get dataset configuration
-            dataset_config = get_dataset(dataset_id)
+            dataset_config = Config.get_dataset(dataset_id)
             
             # Run full security validation with dataset context
             validation_result = validate_sql_for_client_isolation(sql, client_id, dataset_config)

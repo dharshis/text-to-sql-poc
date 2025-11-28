@@ -158,3 +158,4 @@ FROM fact_forecasts;
 SELECT '' as space;
 SELECT '✅ All demo data requirements met!' as status;
 
+

@@ -1,0 +1,57 @@
+{
+  "application": {
+    "name": "Text-to-SQL POC",
+    "version": "1.0.0",
+    "environment": "development"
+  },
+  "flask": {
+    "debug": true,
+    "port": 5001,
+    "host": "0.0.0.0",
+    "cors_origins": ["http://localhost:5173"]
+  },
+  "claude": {
+    "api_key": "${ANTHROPIC_API_KEY}",
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 1000,
+    "timeout": 10
+  },
+  "query_execution": {
+    "max_results": 1000,
+    "timeout": 30
+  },
+  "active_dataset": "em_market",
+  "datasets": {
+    "sales": {
+      "id": "sales",
+      "name": "Sales Transactions",
+      "db_path": "data/text_to_sql_poc.db",
+      "client_isolation": {
+        "enabled": true,
+        "field": "client_id",
+        "tables_requiring_filter": ["sales"]
+      }
+    },
+    "market_size": {
+      "id": "market_size",
+      "name": "Market Size Analytics",
+      "db_path": "data/market_size.db",
+      "client_isolation": {
+        "enabled": true,
+        "field": "client_id",
+        "tables_requiring_filter": ["fact_market_size", "fact_forecasts"]
+      }
+    },
+    "em_market": {
+      "id": "em_market",
+      "name": "EM Market - FMCG/CPG Analytics",
+      "db_path": "data/em_market/em_market.db",
+      "client_isolation": {
+        "enabled": false,
+        "client_table": "Dim_Corporation",
+        "client_id_field": "corp_id",
+        "client_name_field": "corp_name"
+      }
+    }
+  }
+}

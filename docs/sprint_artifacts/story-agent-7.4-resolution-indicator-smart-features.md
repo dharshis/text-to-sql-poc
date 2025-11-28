@@ -407,3 +407,4 @@ backend/services/agentic_text2sql_service.py (add _generate_suggestions)
 **Started:** TBD  
 **Completed:** TBD
 
+

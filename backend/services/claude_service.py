@@ -105,10 +105,48 @@ class ClaudeService:
         self.model = Config.CLAUDE_MODEL
         self.max_tokens = Config.CLAUDE_MAX_TOKENS
         self.timeout = Config.CLAUDE_TIMEOUT
+    
+    def _get_filter_instruction(self, client_id, dataset_id=None):
+        """
+        Get dataset-specific filtering instruction for SQL generation.
+        
+        Args:
+            client_id (int): Client/Corporation ID
+            dataset_id (str, optional): Dataset identifier
+            
+        Returns:
+            str: Filtering instruction for the LLM
+        """
+        if not dataset_id:
+            # Default: row-level client_id filtering
+            return f'ALWAYS include "WHERE client_id = {client_id}" in your queries to enforce data isolation'
+        
+        try:
+            from config import Config
+            dataset_config = Config.get_dataset(dataset_id)
+            
+            # Check if dataset uses alternative isolation method
+            if 'client_isolation' in dataset_config:
+                client_iso = dataset_config['client_isolation']
+                client_table = client_iso.get('client_table', 'clients')
+                
+                # em_market uses corp_id through brand hierarchy
+                if client_table == 'Dim_Corporation':
+                    return (f'MANDATORY: Filter by corporation using "WHERE corp_id = {client_id}" or '
+                           f'"WHERE b.corp_id = {client_id}" when joining through Dim_Brand. '
+                           f'The brand hierarchy is: Dim_Corporation → Dim_Brand → Dim_SubBrand → Dim_Product_SKU. '
+                           f'Always join to Dim_Brand and filter by corp_id to isolate data for the selected corporation.')
+            
+            # Default: row-level client_id filtering
+            return f'ALWAYS include "WHERE client_id = {client_id}" in your queries to enforce data isolation'
+            
+        except Exception as e:
+            logger.warning(f"Error loading dataset config for {dataset_id}: {e}. Using default filtering.")
+            return f'ALWAYS include "WHERE client_id = {client_id}" in your queries to enforce data isolation'
 
         logger.info(f"Claude service initialized with model: {self.model}")
 
-    def generate_sql(self, natural_language_query, client_id, client_name=None, custom_schema=None):
+    def generate_sql(self, natural_language_query, client_id, client_name=None, custom_schema=None, dataset_id=None):
         """
         Generate SQL query from natural language using Claude API.
 
@@ -117,6 +155,7 @@ class ClaudeService:
             client_id (int): Client ID for data isolation
             client_name (str, optional): Client name for additional context
             custom_schema (str, optional): Custom database schema (overrides default)
+            dataset_id (str, optional): Dataset identifier for dataset-specific instructions
 
         Returns:
             str: Generated SQL query
@@ -126,8 +165,11 @@ class ClaudeService:
             APIError: If Claude API returns an error
             ValueError: If generated SQL is invalid
         """
-        logger.info(f"Generating SQL for client_id={client_id}, query='{natural_language_query[:100]}'")
+        logger.info(f"Generating SQL for client_id={client_id}, dataset={dataset_id}, query='{natural_language_query[:100]}'")
 
+        # Determine filtering instruction based on dataset
+        filter_instruction = self._get_filter_instruction(client_id, dataset_id)
+        
         # Build user prompt with client context
         user_prompt = f"""Client Context: client_id = {client_id}"""
         if client_name:
@@ -148,12 +190,12 @@ DATABASE SCHEMA:
 {schema_to_use}
 
 CRITICAL RULES:
-1. ALWAYS include "WHERE client_id = {{client_id}}" in your queries to enforce data isolation
+1. {filter_instruction}
 2. Use ONLY the tables and columns defined in the schema above
 3. Generate valid SQLite syntax
 4. Return ONLY the SQL query without explanations
 5. Use proper JOINs when querying across multiple tables
-6. Always filter by the provided client_id in WHERE clauses
+6. Always apply the filtering rule specified in rule #1
 
 Generate clean, efficient SQL queries based on the user's natural language input."""
 

@@ -73,40 +73,92 @@ def validate_sql_for_client_isolation(sql_query, expected_client_id, dataset_con
     sql_normalized = ' '.join(sql_query.split())  # Collapse whitespace
 
     # ==========================================
-    # Check 1: Client ID Filter
+    # Check 1: Client/Corporation ID Filter (MANDATORY - Dataset-Aware)
     # ==========================================
-    # Look for "WHERE ... client_id = {expected_client_id}"
-    # This should appear in the query to filter by client
-
-    # Pattern to find WHERE clause with client_id filter
-    # Matches: WHERE client_id = 5 OR WHERE s.client_id = 5 OR WHERE ... AND client_id = 5
-    client_id_patterns = [
-        rf'\bWHERE\s+.*?\bclient_id\s*=\s*{expected_client_id}\b',
-        rf'\bAND\s+.*?\bclient_id\s*=\s*{expected_client_id}\b',
-        rf'\bclient_id\s*=\s*{expected_client_id}\b.*?\bWHERE\b',  # In subqueries
-    ]
-
-    client_id_found = False
-    for pattern in client_id_patterns:
-        if re.search(pattern, sql_normalized, re.IGNORECASE):
-            client_id_found = True
-            break
-
-    if not client_id_found:
-        passed = False
-        checks.append({
-            "name": "Client ID Filter",
-            "status": "FAIL",
-            "message": f"Missing WHERE client_id = {expected_client_id} filter"
-        })
-        logger.warning(f"Validation FAILED: Missing client_id filter for client {expected_client_id}")
+    # ALL datasets MUST filter by client/corporation ID
+    # Different datasets use different isolation methods:
+    #   - sales/market_size: row-level client_id in fact tables
+    #   - em_market: corp_id through brand hierarchy (Dim_Brand)
+    
+    # Determine which field to check based on dataset config
+    filter_field = "client_id"  # Default
+    filter_method = "row-level"  # Default
+    
+    if dataset_config and 'client_isolation' in dataset_config:
+        client_iso = dataset_config['client_isolation']
+        
+        # Check if dataset uses alternative field (like corp_id)
+        if 'client_table' in client_iso:
+            client_table = client_iso.get('client_table', 'clients')
+            filter_field = client_iso.get('client_id_field', 'client_id')
+            
+            # em_market uses corp_id through brand hierarchy
+            if client_table == 'Dim_Corporation':
+                filter_method = "brand-hierarchy"
+    
+    # Look for the appropriate filter pattern
+    if filter_method == "brand-hierarchy":
+        # For em_market: check for corp_id filter through Dim_Brand join
+        # Pattern: JOIN Dim_Brand ... WHERE corp_id = X OR b.corp_id = X
+        corp_id_patterns = [
+            rf'\bWHERE\s+.*?\bcorp_id\s*=\s*{expected_client_id}\b',
+            rf'\bAND\s+.*?\bcorp_id\s*=\s*{expected_client_id}\b',
+            rf'\bcorp_id\s*=\s*{expected_client_id}\b',  # Anywhere in query
+        ]
+        
+        filter_found = False
+        for pattern in corp_id_patterns:
+            if re.search(pattern, sql_normalized, re.IGNORECASE):
+                filter_found = True
+                break
+        
+        if not filter_found:
+            passed = False
+            checks.append({
+                "name": "Client ID Filter",
+                "status": "FAIL",
+                "message": f"Missing corp_id = {expected_client_id} filter in brand hierarchy"
+            })
+            logger.warning(f"Validation FAILED: Missing corp_id filter for corporation {expected_client_id}")
+        else:
+            checks.append({
+                "name": "Client ID Filter",
+                "status": "PASS",
+                "message": f"Query correctly filters by corp_id = {expected_client_id}"
+            })
+            logger.debug(f"Corporation filter check: PASS")
+    
     else:
-        checks.append({
-            "name": "Client ID Filter",
-            "status": "PASS",
-            "message": f"Query correctly filters by client_id = {expected_client_id}"
-        })
-        logger.debug(f"Client ID filter check: PASS")
+        # Default: row-level client_id filtering
+        # Pattern to find WHERE clause with client_id filter
+        # Matches: WHERE client_id = 5 OR WHERE s.client_id = 5 OR WHERE ... AND client_id = 5
+        client_id_patterns = [
+            rf'\bWHERE\s+.*?\bclient_id\s*=\s*{expected_client_id}\b',
+            rf'\bAND\s+.*?\bclient_id\s*=\s*{expected_client_id}\b',
+            rf'\bclient_id\s*=\s*{expected_client_id}\b.*?\bWHERE\b',  # In subqueries
+        ]
+
+        client_id_found = False
+        for pattern in client_id_patterns:
+            if re.search(pattern, sql_normalized, re.IGNORECASE):
+                client_id_found = True
+                break
+
+        if not client_id_found:
+            passed = False
+            checks.append({
+                "name": "Client ID Filter",
+                "status": "FAIL",
+                "message": f"Missing WHERE client_id = {expected_client_id} filter"
+            })
+            logger.warning(f"Validation FAILED: Missing client_id filter for client {expected_client_id}")
+        else:
+            checks.append({
+                "name": "Client ID Filter",
+                "status": "PASS",
+                "message": f"Query correctly filters by client_id = {expected_client_id}"
+            })
+            logger.debug(f"Client ID filter check: PASS")
 
     # ==========================================
     # Check 2: Single Client

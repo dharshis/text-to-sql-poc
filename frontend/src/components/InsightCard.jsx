@@ -154,3 +154,4 @@ const InsightCard = ({ explanation }) => {
 
 export default InsightCard;
 
+

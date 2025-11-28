@@ -27,6 +27,48 @@ query_executor = QueryExecutor()
 agentic_service = AgenticText2SQLService()
 
 
+def _update_active_dataset_in_config(dataset_id: str) -> bool:
+    """
+    Update the active_dataset field in config.json.
+    
+    Args:
+        dataset_id: New dataset ID to set as active
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    import json
+    from pathlib import Path
+    from config import Config, CONFIG_FILE
+    
+    try:
+        # Validate dataset exists
+        if not Config.validate_dataset_id(dataset_id):
+            logger.error(f"Invalid dataset ID: {dataset_id}")
+            return False
+        
+        # Read current config
+        with open(CONFIG_FILE, 'r') as f:
+            config_data = json.load(f)
+        
+        # Update active_dataset
+        config_data['active_dataset'] = dataset_id
+        
+        # Write back
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config_data, f, indent=2)
+        
+        # Reload config
+        Config.reload()
+        
+        logger.info(f"✓ Active dataset changed to: {dataset_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error updating active dataset: {e}")
+        return False
+
+
 @query_bp.route('/query', methods=['POST'])
 def execute_query():
     """
@@ -190,7 +232,7 @@ def execute_agentic_query():
     start_time = time.time()
     
     try:
-        from datasets.active_dataset import get_active_dataset
+        from config import Config
         
         data = request.json
         user_query = data.get('query')
@@ -199,7 +241,7 @@ def execute_agentic_query():
         max_iterations = data.get('max_iterations', 10)
         
         # Get active dataset from backend configuration (not frontend)
-        dataset_id = get_active_dataset()
+        dataset_id = Config.get_active_dataset()
         
         # Input validation (Architecture Section 12.3)
         if not user_query:
@@ -332,20 +374,19 @@ def list_datasets():
                 {
                     "id": "sales",
                     "name": "Sales Transactions",
-                    "description": "...",
-                    "schema_type": "transactional",
-                    "sample_queries": [...]
+                    "db_path": "../data/text_to_sql_poc.db",
+                    "client_isolation_enabled": true
                 },
                 ...
-            ]
+            ],
+            "active_dataset": "em_market"
         }
     """
     try:
-        from datasets.dataset_config import list_datasets as get_datasets
-        from datasets.active_dataset import get_active_dataset
+        from config import Config
         
-        datasets = get_datasets()
-        active_dataset = get_active_dataset()
+        datasets = Config.list_datasets()
+        active_dataset = Config.get_active_dataset()
         
         return jsonify({
             'datasets': datasets,
@@ -372,10 +413,10 @@ def get_active_dataset_endpoint():
         }
     """
     try:
-        from datasets.active_dataset import get_active_dataset, get_active_dataset_info
+        from config import Config
         
-        dataset_id = get_active_dataset()
-        dataset_info = get_active_dataset_info()
+        dataset_id = Config.get_active_dataset()
+        dataset_info = Config.get_active_dataset_info()
         
         return jsonify({
             'active_dataset': dataset_id,
@@ -393,71 +434,106 @@ def get_active_dataset_endpoint():
 @query_bp.route('/clients', methods=['GET'])
 def list_clients():
     """
-    List all clients from the active dataset.
+    List all clients/corporations from the active dataset.
+    
+    Adapts to different dataset schemas:
+    - sales: uses 'clients' table
+    - market_size: uses 'dim_clients' table  
+    - em_market: uses 'Dim_Corporation' table
     
     Response:
         {
             "clients": [
                 {
-                    "client_id": 1,
+                    "client_id": 1,  # or corp_id for em_market
                     "client_name": "Acme Corporation",
-                    "industry": "Manufacturing",
-                    "subscription_tier": "Enterprise",
-                    "is_active": 1
+                    ...
                 },
                 ...
             ],
-            "dataset": "market_size"
+            "dataset": "em_market"
         }
     """
     try:
-        from datasets.active_dataset import get_active_dataset, get_active_dataset_info
+        from config import Config
         import sqlite3
         
-        dataset_id = get_active_dataset()
-        dataset_info = get_active_dataset_info()
+        dataset_id = Config.get_active_dataset()
+        dataset_info = Config.get_active_dataset_info()
         db_path = dataset_info['db_path']
         
-        # Check if dim_clients exists in the dataset
+        # Get client configuration for this dataset
+        client_config = Config.get_client_config(dataset_id)
+        table_name = client_config['table_name']
+        id_field = client_config['id_field']
+        name_field = client_config['name_field']
+        
+        # Connect to database
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
         # Check if table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dim_clients'")
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
         if not cursor.fetchone():
             conn.close()
             return jsonify({
                 'clients': [],
                 'dataset': dataset_id,
-                'message': 'No client dimension in this dataset'
+                'message': f'No {table_name} table in this dataset'
             }), 200
         
-        # Fetch all active clients
-        cursor.execute("""
-            SELECT 
-                client_id,
-                client_name,
-                industry,
-                region,
-                subscription_tier,
-                data_access_level,
-                max_users,
-                account_manager,
-                is_active
-            FROM dim_clients
-            WHERE is_active = 1
-            ORDER BY client_name
-        """)
+        # Get all columns for this table
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        # Build SELECT query with available columns
+        # Always include ID and name fields
+        select_cols = [f"{id_field} as client_id", f"{name_field} as client_name"]
+        
+        # Add optional columns if they exist
+        optional_cols = {
+            'industry': 'industry',
+            'region': 'region',
+            'subscription_tier': 'subscription_tier',
+            'data_access_level': 'data_access_level',
+            'max_users': 'max_users',
+            'account_manager': 'account_manager',
+            'is_active': 'is_active',
+            'price_segment': 'price_segment',  # For em_market brands
+            'headquarters_location': 'headquarters_location'  # For em_market corps
+        }
+        
+        for alias, col in optional_cols.items():
+            if col in columns:
+                select_cols.append(f"{col} as {alias}")
+        
+        # Build WHERE clause  
+        # Handle different is_active representations (INTEGER 1, TEXT 'True', etc.)
+        where_clause = ""
+        if 'is_active' in columns:
+            where_clause = "WHERE (is_active = 1 OR is_active = 'True' OR is_active = 'true')"
+        
+        # Execute query
+        query = f"""
+            SELECT {', '.join(select_cols)}
+            FROM {table_name}
+            {where_clause}
+            ORDER BY {name_field}
+        """
+        
+        logger.debug(f"Executing client query: {query}")
+        cursor.execute(query)
         
         clients = [dict(row) for row in cursor.fetchall()]
         conn.close()
         
-        logger.info(f"Retrieved {len(clients)} clients from {dataset_id}")
+        logger.info(f"Retrieved {len(clients)} clients from {dataset_id} ({table_name})")
         
         return jsonify({
             'clients': clients,
-            'dataset': dataset_id
+            'dataset': dataset_id,
+            'client_table': table_name
         }), 200
     
     except Exception as e:
@@ -486,7 +562,7 @@ def set_active_dataset_endpoint():
         }
     """
     try:
-        from datasets.active_dataset import set_active_dataset, get_active_dataset_info
+        from config import Config
         
         data = request.json
         dataset_id = data.get('dataset_id')
@@ -498,10 +574,11 @@ def set_active_dataset_endpoint():
             }), 400
         
         # Set active dataset
-        success = set_active_dataset(dataset_id)
+        # Update active dataset in config.json
+        success = _update_active_dataset_in_config(dataset_id)
         
         if success:
-            dataset_info = get_active_dataset_info()
+            dataset_info = Config.get_active_dataset_info()
             logger.info(f"✓ Active dataset changed to: {dataset_id}")
             
             return jsonify({

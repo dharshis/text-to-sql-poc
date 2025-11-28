@@ -137,3 +137,4 @@ def test_error_handling():
     assert "success" in result
     assert "method" in result
 
+

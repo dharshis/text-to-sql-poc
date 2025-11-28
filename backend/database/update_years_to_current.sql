@@ -148,3 +148,4 @@ WHERE m.market_name LIKE '%Electric%'
 GROUP BY m.market_name, f.year
 ORDER BY f.year DESC, total_value_m DESC;
 
+

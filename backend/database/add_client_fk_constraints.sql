@@ -117,3 +117,4 @@ SELECT 'All client_ids have matching dim_clients: ' ||
         ELSE 'FAIL ✗'
     END;
 
+
