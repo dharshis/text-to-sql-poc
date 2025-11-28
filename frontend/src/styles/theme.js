@@ -11,59 +11,64 @@ const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#0066CC',      // Professional blue
-      light: '#4A90E2',
-      dark: '#004C99',
+      main: '#34657F',      // Euromonitor Slate Blue
+      light: '#4A7F9A',
+      dark: '#264B5F',
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#6C757D',      // Sophisticated gray
-      light: '#ADB5BD',
-      dark: '#495057',
+      main: '#FF6A13',      // Euromonitor Orange
+      light: '#FF8840',
+      dark: '#E55900',
       contrastText: '#ffffff',
     },
     success: {
-      main: '#10B981',      // Modern green
-      light: '#34D399',
-      dark: '#059669',
+      main: '#00AED9',      // Euromonitor Cyan/Teal
+      light: '#33BFDF',
+      dark: '#0089AD',
       contrastText: '#ffffff',
     },
     error: {
-      main: '#EF4444',      // Modern red
+      main: '#EF4444',      // Modern red (kept for errors)
       light: '#F87171',
       dark: '#DC2626',
       contrastText: '#ffffff',
     },
     warning: {
-      main: '#F59E0B',      // Modern amber
-      light: '#FBBF24',
-      dark: '#D97706',
-      contrastText: '#ffffff',
+      main: '#FF9E1B',      // Euromonitor Golden Yellow
+      light: '#FFB448',
+      dark: '#E58A00',
+      contrastText: '#1b1b1b',
     },
     info: {
-      main: '#3B82F6',      // Modern blue
-      light: '#60A5FA',
-      dark: '#2563EB',
+      main: '#00AED9',      // Euromonitor Cyan
+      light: '#33BFDF',
+      dark: '#0089AD',
       contrastText: '#ffffff',
     },
     background: {
-      default: '#F8F9FA',   // Softer background
+      default: '#F2F3F4',   // Euromonitor off-white
       paper: '#FFFFFF',
-      accent: '#F0F4F8',    // For message bubbles
+      accent: '#E5E5E5',    // Euromonitor light gray
     },
     text: {
-      primary: '#1F2937',   // Darker, more readable
-      secondary: '#6B7280',
+      primary: '#1b1b1b',   // Euromonitor black (headings)
+      secondary: '#3e3e3e', // Euromonitor dark gray (body)
       disabled: '#9CA3AF',
     },
-    divider: '#E5E7EB',
-    // Custom brand colors
+    divider: '#E5E5E5',
+    // Euromonitor brand colors
     brand: {
       gradient: {
-        start: '#667eea',
-        end: '#764ba2',
+        blueStart: '#34657F',   // Slate Blue
+        blueEnd: '#00AED9',     // Cyan
+        orangeStart: '#FF9E1B', // Golden Yellow
+        orangeEnd: '#FF6A13',   // Orange
+        purpleStart: '#653279', // Deep Purple
+        purpleEnd: '#FF6A13',   // Orange
       },
-      accent: '#FF6B6B',
+      purple: '#A83D72',        // Boysenberry Purple
+      deepPurple: '#653279',    // Deep Purple
     },
   },
   typography: {
@@ -212,7 +217,7 @@ const theme = createTheme({
         contained: {
           boxShadow: 'none',
           '&:hover': {
-            boxShadow: '0 4px 12px rgba(0, 102, 204, 0.25)',
+            boxShadow: '0 4px 12px rgba(52, 101, 127, 0.25)',
             transform: 'translateY(-1px)',
           },
           '&:active': {
@@ -223,7 +228,7 @@ const theme = createTheme({
           borderWidth: '1.5px',
           '&:hover': {
             borderWidth: '1.5px',
-            backgroundColor: 'rgba(0, 102, 204, 0.04)',
+            backgroundColor: 'rgba(52, 101, 127, 0.04)',
           },
         },
         sizeLarge: {
@@ -392,7 +397,7 @@ const theme = createTheme({
         root: {
           transition: 'all 0.2s ease',
           '&:hover': {
-            backgroundColor: 'rgba(0, 102, 204, 0.08)',
+            backgroundColor: 'rgba(52, 101, 127, 0.08)',
             transform: 'scale(1.05)',
           },
         },

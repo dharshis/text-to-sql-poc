@@ -67,9 +67,6 @@ function App() {
   // Current agentic data for iterations
   const [currentAgenticData, setCurrentAgenticData] = useState(null);
 
-  // Input text state for suggested questions
-  const [inputText, setInputText] = useState('');
-
   // Initialize session ID
   useEffect(() => {
     if (!sessionId) {
@@ -124,23 +121,9 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
-  // Handle suggested question click
-  const handleSuggestedQuestionClick = (question, autoSubmit = false) => {
-    if (autoSubmit) {
-      // Auto-submit the question
-      handleQuerySubmit(question);
-    } else {
-      // Just populate the input field
-      setInputText(question);
-    }
-  };
-
   // Handle query submission
   const handleQuerySubmit = async (query) => {
     if (!selectedClientId) return;
-
-    // Clear input text after submission
-    setInputText('');
 
     // Clear clarified query unless it's the clarified query being submitted
     if (!clarifiedQuery || clarifiedQuery.combined !== query) {
@@ -321,7 +304,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
         {/* App Bar */}
         <AppBar position="static" elevation={1}>
           <Toolbar>
@@ -415,7 +398,7 @@ function App() {
         </AppBar>
 
         {/* Alerts and Status Area */}
-        <Box sx={{ backgroundColor: 'background.default', borderBottom: '1px solid', borderColor: 'divider', width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
+        <Box sx={{ backgroundColor: 'background.default', borderBottom: '1px solid', borderColor: 'divider' }}>
           {/* Backend Connection Error */}
           {!healthStatus || (healthStatus.status !== 'healthy' && (
             <Alert severity="warning" sx={{ borderRadius: 0 }}>
@@ -468,55 +451,17 @@ function App() {
           )}
         </Box>
 
-        {/* Chat Area - 20:60:20 Layout */}
-        <Box
-          sx={{
-            flex: 1,
-            overflow: 'hidden',
-            backgroundColor: 'background.default',
-            display: 'flex',
-            width: '100%',
-            maxWidth: '100%',
-            minWidth: 0,
-          }}
-        >
-          {/* Left Whitespace (20%) */}
-          <Box sx={{ width: '20%', flexShrink: 0 }} />
-
-          {/* Main Chat Area (60%) */}
-          <Box
-            sx={{
-              width: '60%',
-              flexShrink: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              minWidth: 0,
-            }}
-          >
-            {/* Chat Messages */}
-            <Box sx={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-              <ChatContainer
-                messages={messages}
-                loading={loading}
-                onSuggestedQuestionClick={handleSuggestedQuestionClick}
-              />
-            </Box>
-
-            {/* Input Area - Fixed at bottom */}
-            <Box sx={{ flexShrink: 0 }}>
-              <ChatInput
-                onSubmit={handleQuerySubmit}
-                disabled={!selectedClientId || clientsLoading}
-                loading={loading}
-                value={inputText}
-                onChange={setInputText}
-              />
-            </Box>
-          </Box>
-
-          {/* Right Whitespace (20%) */}
-          <Box sx={{ width: '20%', flexShrink: 0 }} />
+        {/* Chat Area */}
+        <Box sx={{ flex: 1, overflow: 'hidden', backgroundColor: 'background.default' }}>
+          <ChatContainer messages={messages} loading={loading} />
         </Box>
+
+        {/* Input Area */}
+        <ChatInput
+          onSubmit={handleQuerySubmit}
+          disabled={!selectedClientId || clientsLoading}
+          loading={loading}
+        />
 
         {/* Clarification Dialog */}
         <ClarificationDialog

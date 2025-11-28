@@ -46,13 +46,6 @@ const ValidationSummary = ({ reflection, securityValidation }) => {
   const allQualityIssues = [...criticalErrors, ...issues].filter(issue => issue && issue.trim && issue.trim() !== '');
   const hasQualityIssues = allQualityIssues.length > 0;
 
-  // Debug logging
-  console.log('ValidationSummary - reflection:', reflection);
-  console.log('ValidationSummary - criticalErrors:', criticalErrors);
-  console.log('ValidationSummary - issues:', issues);
-  console.log('ValidationSummary - allQualityIssues:', allQualityIssues);
-  console.log('ValidationSummary - hasQualityIssues:', hasQualityIssues);
-
   // Parse security validation data
   const securityPassed = securityValidation?.passed ?? true;
   const securityChecks = securityValidation?.checks || [];

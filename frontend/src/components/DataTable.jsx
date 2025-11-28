@@ -98,8 +98,8 @@ const DataTable = ({ data, columns }) => {
         </Typography>
       </Box>
 
-      <TableContainer sx={{ maxHeight: 600, overflowX: 'auto' }}>
-        <Table stickyHeader sx={{ minWidth: 650 }}>
+      <TableContainer sx={{ maxHeight: 600, overflowX: 'auto', width: '100%' }}>
+        <Table stickyHeader sx={{ width: '100%', tableLayout: 'auto' }}>
           <TableHead>
             <TableRow>
               {columns.map((column) => (
