@@ -1,0 +1,101 @@
+sku_id,sku_description,barcode_ean,subbrand_id,category_name,form_factor,pack_type,pack_size_value,pack_size_unit,volume_in_liters_kg
+5000,Pure Leaf Original 250g,89947446,336,Tea,Solid,Box,250,g,0.25
+5001,Quaker Original 400g,89970580,360,Food,Solid,Jar,400,g,0.4
+5002,Magnum Original 100ml,82262164,356,Ice Cream,Frozen,Tub,100,ml,0.1
+5003,Coca-Cola Special/Zero 2000ml,87082999,325,Soft Drinks,Liquid,Bottle,2000,ml,2.0
+5004,Lays Original 200g,83346948,339,Snacks,Solid,Bag,200,g,0.2
+5005,Mars Bar Original 100g,88193970,352,Chocolate,Solid,Bar,100,g,0.1
+5006,Ben & Jerrys Original 100ml,81431096,355,Ice Cream,Frozen,Tub,100,ml,0.1
+5007,Dove Special/Zero 400ml,81087659,301,Hair Care,Liquid,Bottle,400,ml,0.4
+5008,Evian Original 1500ml,89979125,365,Water,Liquid,Bottle,1500,ml,1.5
+5009,Heinz Original 800g,83255765,359,Food,Solid,Jar,800,g,0.8
+5010,Knorr Original 800g,85875557,357,Food,Solid,Jar,800,g,0.8
+5011,Herbal Essences Original 400ml,82125401,306,Hair Care,Liquid,Bottle,400,ml,0.4
+5012,L Oreal Paris Original 400ml,87079532,312,Hair Care,Liquid,Bottle,400,ml,0.4
+5013,Coca-Cola Original 330ml,85152492,324,Soft Drinks,Liquid,Bottle,330,ml,0.33
+5014,Colgate Original 125ml,88805837,316,Oral Care,Paste,Tube,125,ml,0.125
+5015,KitKat Original 45g,82140863,351,Chocolate,Solid,Bar,45,g,0.045
+5016,McDonalds Original 300g,87460026,318,Fast Food,Solid,Wrapper,300,g,0.3
+5017,Fanta Original 330ml,82467490,328,Soft Drinks,Liquid,Can,330,ml,0.33
+5018,Hellmanns Original 400g,83699243,358,Food,Solid,Jar,400,g,0.4
+5019,Sunsilk Original 250ml,88169258,308,Hair Care,Liquid,Bottle,250,ml,0.25
+5020,Lipton Original 100g,86622324,335,Tea,Solid,Box,100,g,0.1
+5021,Milka Original 100g,86232015,348,Chocolate,Solid,Bar,100,g,0.1
+5022,Ariel Original 2kg,87044962,362,Home Care,Powder,Box,2,kg,2.0
+5023,Nespresso Original 200g,82007648,338,Coffee,Solid,Pod,200,g,0.2
+5024,Pantene Special/Zero 250ml,82386666,305,Hair Care,Liquid,Bottle,250,ml,0.25
+5025,L Oreal Paris Special/Zero 400ml,86467532,313,Hair Care,Liquid,Bottle,400,ml,0.4
+5026,Garnier Original 750ml,82852464,314,Hair Care,Liquid,Bottle,750,ml,0.75
+5027,Oreo Original 200g,88944252,345,Snacks,Solid,Bag,200,g,0.2
+5028,Oral-B Original 125ml,84727817,317,Oral Care,Paste,Tube,125,ml,0.125
+5029,Stella Artois Original 330ml,85757175,321,Beer,Liquid,Can,330,ml,0.33
+5030,Doritos Special/Zero 200g,83053600,342,Snacks,Solid,Bag,200,g,0.2
+5031,Pepsi Original 2000ml,83130305,330,Soft Drinks,Liquid,Can,2000,ml,2.0
+5032,Heineken Original 500ml,89099012,322,Beer,Liquid,Can,500,ml,0.5
+5033,Herbal Essences Special/Zero 750ml,82046867,307,Hair Care,Liquid,Bottle,750,ml,0.75
+5034,TRESemme Original 250ml,82829979,310,Hair Care,Liquid,Bottle,250,ml,0.25
+5035,Snickers Original 100g,88263344,349,Chocolate,Solid,Bar,100,g,0.1
+5036,Garnier Special/Zero 250ml,82738566,315,Hair Care,Liquid,Bottle,250,ml,0.25
+5037,M&Ms Original 100g,84801949,350,Chocolate,Solid,Bar,100,g,0.1
+5038,Corona Original 500ml,84747014,323,Beer,Liquid,Bottle,500,ml,0.5
+5039,Pepsi Special/Zero 2000ml,88937358,331,Soft Drinks,Liquid,Bottle,2000,ml,2.0
+5040,Mountain Dew Original 1500ml,89627936,332,Soft Drinks,Liquid,Bottle,1500,ml,1.5
+5041,Head & Shoulders Special/Zero 750ml,85658534,303,Hair Care,Liquid,Bottle,750,ml,0.75
+5042,Cadbury Original 100g,83536944,347,Chocolate,Solid,Bar,100,g,0.1
+5043,Gatorade Original 750ml,83505600,334,Sports Drink,Liquid,Bottle,750,ml,0.75
+5044,Lays Special/Zero 150g,82181249,340,Snacks,Solid,Bag,150,g,0.15
+5045,Danonino Original 500g,84890214,354,Yogurt,Semi-Solid,Cup,500,g,0.5
+5046,Sunsilk Special/Zero 400ml,81889172,309,Hair Care,Liquid,Bottle,400,ml,0.4
+5047,Doritos Original 150g,82297713,341,Snacks,Solid,Bag,150,g,0.15
+5048,Head & Shoulders Original 750ml,83476190,302,Hair Care,Liquid,Bottle,750,ml,0.75
+5049,Oreo Special/Zero 200g,82881860,346,Snacks,Solid,Bag,200,g,0.2
+5050,Fanta Special/Zero 1500ml,84140928,329,Soft Drinks,Liquid,Bottle,1500,ml,1.5
+5051,Tide Original 2kg,82046995,361,Home Care,Powder,Bottle,2,kg,2.0
+5052,Palmolive Original 250ml,84798098,364,Personal Care,Liquid,Bottle,250,ml,0.25
+5053,TRESemme Special/Zero 400ml,81306808,311,Hair Care,Liquid,Bottle,400,ml,0.4
+5054,Sprite Original 2000ml,83979091,326,Soft Drinks,Liquid,Can,2000,ml,2.0
+5055,Domestos Original 2kg,83171339,363,Home Care,Liquid,Bottle,2,kg,2.0
+5056,Pringles Special/Zero 200g,87669557,344,Snacks,Solid,Bag,200,g,0.2
+5057,Pringles Original 150g,82280118,343,Snacks,Solid,Bag,150,g,0.15
+5058,Activia Original 500g,81681112,353,Yogurt,Semi-Solid,Cup,500,g,0.5
+5059,Nescafe Original 100g,83015208,337,Coffee,Solid,Jar,100,g,0.1
+5060,Mountain Dew Special/Zero 330ml,87426465,333,Soft Drinks,Liquid,Bottle,330,ml,0.33
+5061,Sprite Special/Zero 330ml,82158045,327,Soft Drinks,Liquid,Can,330,ml,0.33
+5062,Burger King Original 300g,82101805,319,Fast Food,Solid,Wrapper,300,g,0.3
+5063,Budweiser Original 500ml,87246947,320,Beer,Liquid,Can,500,ml,0.5
+5064,Pantene Original 750ml,87936427,304,Hair Care,Liquid,Bottle,750,ml,0.75
+5065,Dove Original 400ml,86200070,300,Hair Care,Liquid,Bottle,400,ml,0.4
+5066,Pure Leaf Original 100g,86183330,336,Tea,Solid,Box,100,g,0.1
+5067,Quaker Original 800g,82494692,360,Food,Solid,Jar,800,g,0.8
+5068,Magnum Original 100ml,85814920,356,Ice Cream,Frozen,Tub,100,ml,0.1
+5069,Coca-Cola Special/Zero 330ml,83487514,325,Soft Drinks,Liquid,Bottle,330,ml,0.33
+5070,Lays Original 200g,85079737,339,Snacks,Solid,Bag,200,g,0.2
+5071,Mars Bar Original 45g,85529136,352,Chocolate,Solid,Bar,45,g,0.045
+5072,Ben & Jerrys Original 100ml,86106807,355,Ice Cream,Frozen,Stick,100,ml,0.1
+5073,Dove Special/Zero 250ml,83126729,301,Hair Care,Liquid,Bottle,250,ml,0.25
+5074,Evian Original 1500ml,85812071,365,Water,Liquid,Bottle,1500,ml,1.5
+5075,Heinz Original 800g,88047937,359,Food,Solid,Jar,800,g,0.8
+5076,Knorr Original 400g,85803991,357,Food,Solid,Jar,400,g,0.4
+5077,Herbal Essences Original 750ml,85060923,306,Hair Care,Liquid,Bottle,750,ml,0.75
+5078,L Oreal Paris Original 750ml,86540849,312,Hair Care,Liquid,Bottle,750,ml,0.75
+5079,Coca-Cola Original 1500ml,82018060,324,Soft Drinks,Liquid,Bottle,1500,ml,1.5
+5080,Colgate Original 125ml,84442755,316,Oral Care,Paste,Tube,125,ml,0.125
+5081,KitKat Original 100g,82034433,351,Chocolate,Solid,Bar,100,g,0.1
+5082,McDonalds Original 300g,81420151,318,Fast Food,Solid,Wrapper,300,g,0.3
+5083,Fanta Original 330ml,82362265,328,Soft Drinks,Liquid,Bottle,330,ml,0.33
+5084,Hellmanns Original 400g,89141399,358,Food,Solid,Jar,400,g,0.4
+5085,Sunsilk Original 750ml,81488297,308,Hair Care,Liquid,Bottle,750,ml,0.75
+5086,Lipton Original 100g,87307723,335,Tea,Solid,Box,100,g,0.1
+5087,Milka Original 100g,87455958,348,Chocolate,Solid,Bar,100,g,0.1
+5088,Ariel Original 2kg,89800727,362,Home Care,Liquid,Box,2,kg,2.0
+5089,Nespresso Original 200g,82313920,338,Coffee,Solid,Jar,200,g,0.2
+5090,Pantene Special/Zero 250ml,84723029,305,Hair Care,Liquid,Bottle,250,ml,0.25
+5091,L Oreal Paris Special/Zero 400ml,83542957,313,Hair Care,Liquid,Bottle,400,ml,0.4
+5092,Garnier Original 750ml,89292441,314,Hair Care,Liquid,Bottle,750,ml,0.75
+5093,Oreo Original 200g,85818406,345,Snacks,Solid,Bag,200,g,0.2
+5094,Oral-B Original 125ml,86189059,317,Oral Care,Paste,Tube,125,ml,0.125
+5095,Stella Artois Original 330ml,83852682,321,Beer,Liquid,Bottle,330,ml,0.33
+5096,Doritos Special/Zero 200g,87762391,342,Snacks,Solid,Bag,200,g,0.2
+5097,Pepsi Original 330ml,82540628,330,Soft Drinks,Liquid,Bottle,330,ml,0.33
+5098,Heineken Original 330ml,88624449,322,Beer,Liquid,Can,330,ml,0.33
+5099,Herbal Essences Special/Zero 750ml,87398427,307,Hair Care,Liquid,Bottle,750,ml,0.75

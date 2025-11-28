@@ -1,0 +1,50 @@
+brand_id,brand_name,corp_id,price_segment
+201,Dove,101,Mass
+202,Head & Shoulders,102,Mass
+210,Pantene,102,Mass
+211,Herbal Essences,102,Mass
+212,Sunsilk,101,Economy
+213,TRESemme,101,Premium
+214,L Oreal Paris,111,Mass
+215,Garnier,111,Economy
+216,Colgate,112,Mass
+217,Oral-B,102,Premium
+203,McDonalds,103,Economy
+204,Burger King,104,Economy
+205,Budweiser,105,Mass
+206,Stella Artois,105,Premium
+207,Heineken,106,Premium
+208,Corona,105,Premium
+218,Coca-Cola,108,Mass
+219,Sprite,108,Mass
+220,Fanta,108,Mass
+221,Pepsi,109,Mass
+222,Mountain Dew,109,Mass
+223,Gatorade,109,Premium
+224,Lipton,101,Mass
+225,Pure Leaf,109,Premium
+226,Nescafe,110,Mass
+227,Nespresso,110,Premium
+228,Lays,109,Mass
+229,Doritos,109,Mass
+230,Pringles,113,Mass
+231,Oreo,114,Mass
+232,Cadbury,114,Mass
+233,Milka,114,Mass
+234,Snickers,113,Mass
+235,M&Ms,113,Mass
+236,KitKat,110,Mass
+237,Mars Bar,113,Mass
+238,Activia,115,Premium
+239,Danonino,115,Mass
+240,Ben & Jerrys,101,Premium
+241,Magnum,101,Premium
+242,Knorr,101,Mass
+243,Hellmanns,101,Mass
+244,Heinz,104,Mass
+245,Quaker,109,Mass
+246,Tide,102,Mass
+247,Ariel,102,Mass
+248,Domestos,101,Economy
+249,Palmolive,112,Mass
+250,Evian,115,Premium

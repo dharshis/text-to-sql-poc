@@ -1,0 +1,67 @@
+subbrand_id,subbrand_name,brand_id
+300,Dove Original,201
+301,Dove Special/Zero,201
+302,Head & Shoulders Original,202
+303,Head & Shoulders Special/Zero,202
+304,Pantene Original,210
+305,Pantene Special/Zero,210
+306,Herbal Essences Original,211
+307,Herbal Essences Special/Zero,211
+308,Sunsilk Original,212
+309,Sunsilk Special/Zero,212
+310,TRESemme Original,213
+311,TRESemme Special/Zero,213
+312,L Oreal Paris Original,214
+313,L Oreal Paris Special/Zero,214
+314,Garnier Original,215
+315,Garnier Special/Zero,215
+316,Colgate Original,216
+317,Oral-B Original,217
+318,McDonalds Original,203
+319,Burger King Original,204
+320,Budweiser Original,205
+321,Stella Artois Original,206
+322,Heineken Original,207
+323,Corona Original,208
+324,Coca-Cola Original,218
+325,Coca-Cola Special/Zero,218
+326,Sprite Original,219
+327,Sprite Special/Zero,219
+328,Fanta Original,220
+329,Fanta Special/Zero,220
+330,Pepsi Original,221
+331,Pepsi Special/Zero,221
+332,Mountain Dew Original,222
+333,Mountain Dew Special/Zero,222
+334,Gatorade Original,223
+335,Lipton Original,224
+336,Pure Leaf Original,225
+337,Nescafe Original,226
+338,Nespresso Original,227
+339,Lays Original,228
+340,Lays Special/Zero,228
+341,Doritos Original,229
+342,Doritos Special/Zero,229
+343,Pringles Original,230
+344,Pringles Special/Zero,230
+345,Oreo Original,231
+346,Oreo Special/Zero,231
+347,Cadbury Original,232
+348,Milka Original,233
+349,Snickers Original,234
+350,M&Ms Original,235
+351,KitKat Original,236
+352,Mars Bar Original,237
+353,Activia Original,238
+354,Danonino Original,239
+355,Ben & Jerrys Original,240
+356,Magnum Original,241
+357,Knorr Original,242
+358,Hellmanns Original,243
+359,Heinz Original,244
+360,Quaker Original,245
+361,Tide Original,246
+362,Ariel Original,247
+363,Domestos Original,248
+364,Palmolive Original,249
+365,Evian Original,250

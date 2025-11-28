@@ -1,0 +1,25 @@
+geo_id,country_name,region_name,currency_code,currency_exchange_rate
+1,USA,North America,USD,1.0
+2,United Kingdom,Europe,GBP,1.27
+3,Germany,Europe,EUR,1.09
+4,Japan,Asia,JPY,0.0068
+5,France,Europe,EUR,1.09
+6,Italy,Europe,EUR,1.09
+7,Spain,Europe,EUR,1.09
+8,Canada,North America,CAD,0.74
+9,Australia,APAC,AUD,0.65
+10,Brazil,LATAM,BRL,0.2
+11,Mexico,LATAM,MXN,0.058
+12,India,Asia,INR,0.012
+13,China,Asia,CNY,0.14
+14,South Korea,Asia,KRW,0.00075
+15,Indonesia,Asia,IDR,6.4e-05
+16,South Africa,Africa,ZAR,0.053
+17,Nigeria,Africa,NGN,0.0011
+18,Saudi Arabia,ME,SAR,0.27
+19,UAE,ME,AED,0.27
+20,Turkey,Europe,TRY,0.033
+21,Netherlands,Europe,EUR,1.09
+22,Sweden,Europe,SEK,0.096
+23,Switzerland,Europe,CHF,1.15
+24,Thailand,Asia,THB,0.028
