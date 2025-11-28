@@ -15,9 +15,9 @@ import { Box, CircularProgress, Alert, Typography } from '@mui/material';
 import DataVisualization from './DataVisualization';
 import DataTable from './DataTable';
 import SqlDisplay from './SqlDisplay';
-import ValidationMetrics from './ValidationMetrics';
+import ValidationSummary from './ValidationSummary';
 
-const ResultsDisplay = ({ loading, error, results }) => {
+const ResultsDisplay = ({ loading, error, results, reflection }) => {
   // Loading state
   if (loading) {
     return (
@@ -108,11 +108,11 @@ const ResultsDisplay = ({ loading, error, results }) => {
 
   // Display results
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%', maxWidth: '100%' }}>
       {/* Performance Metrics */}
       {results.metrics && (
-        <Alert severity="info" icon={false}>
-          <Typography variant="body2">
+        <Alert severity="info" icon={false} sx={{ width: '100%', boxSizing: 'border-box' }}>
+          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
             <strong>Performance:</strong> Total time {results.metrics.total_time}s
             {' | '}
             SQL generation: {results.metrics.sql_generation_time}s
@@ -126,9 +126,6 @@ const ResultsDisplay = ({ loading, error, results }) => {
         </Alert>
       )}
 
-      {/* Validation Metrics */}
-      {results.validation && <ValidationMetrics validation={results.validation} />}
-
       {/* Data Visualization */}
       {results.results && results.results.length > 0 && (
         <DataVisualization data={results.results} columns={results.columns} />
@@ -141,6 +138,14 @@ const ResultsDisplay = ({ loading, error, results }) => {
 
       {/* SQL Display */}
       {results.sql && <SqlDisplay sql={results.sql} />}
+
+      {/* Unified Validation Summary - Quality Check + Security Validation */}
+      {(reflection || results.validation) && (
+        <ValidationSummary
+          reflection={reflection}
+          securityValidation={results.validation}
+        />
+      )}
     </Box>
   );
 };

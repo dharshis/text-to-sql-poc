@@ -184,14 +184,14 @@ const DataVisualization = ({ data, columns }) => {
   };
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 3, width: '100%', maxWidth: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
       <Typography variant="h6" gutterBottom>
         Data Visualization{' '}
         <Typography component="span" variant="body2" color="text.secondary">
           ({chartType} chart, {data.length} data points)
         </Typography>
       </Typography>
-      <Box sx={{ mt: 2 }}>{renderChart()}</Box>
+      <Box sx={{ mt: 2, width: '100%' }}>{renderChart()}</Box>
     </Paper>
   );
 };

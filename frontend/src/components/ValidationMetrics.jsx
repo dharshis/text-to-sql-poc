@@ -54,8 +54,8 @@ const ValidationMetrics = ({ validation }) => {
   };
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+    <Paper sx={{ p: 3, width: '100%', maxWidth: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
         <SecurityIcon color="primary" />
         <Typography variant="h6">Security Validation</Typography>
       </Box>

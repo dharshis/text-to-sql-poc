@@ -88,7 +88,7 @@ const DataTable = ({ data, columns }) => {
   };
 
   return (
-    <Paper sx={{ width: '100%' }}>
+    <Paper sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
         <Typography variant="h6">
           Query Results{' '}
@@ -98,8 +98,8 @@ const DataTable = ({ data, columns }) => {
         </Typography>
       </Box>
 
-      <TableContainer sx={{ maxHeight: 600 }}>
-        <Table stickyHeader>
+      <TableContainer sx={{ maxHeight: 600, overflowX: 'auto' }}>
+        <Table stickyHeader sx={{ minWidth: 650 }}>
           <TableHead>
             <TableRow>
               {columns.map((column) => (

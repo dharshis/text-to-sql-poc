@@ -66,14 +66,14 @@ const SqlDisplay = ({ sql }) => {
 
   return (
     <>
-      <Paper sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Paper sx={{ p: 2, width: '100%', maxWidth: '100%', overflow: 'hidden', boxSizing: 'border-box' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CodeIcon color="primary" />
             <Typography variant="h6">Generated SQL Query</Typography>
           </Box>
 
-          <Box>
+          <Box sx={{ display: 'flex' }}>
             <Tooltip title="Copy SQL">
               <IconButton onClick={handleCopy} size="small">
                 <CopyIcon />
@@ -104,8 +104,10 @@ const SqlDisplay = ({ sql }) => {
               fontFamily: 'monospace',
               fontSize: '0.875rem',
               lineHeight: 1.6,
-              overflow: 'auto',
+              overflowX: 'auto',
+              overflowY: 'auto',
               maxHeight: 300,
+              wordBreak: 'break-word',
             }}
             dangerouslySetInnerHTML={{ __html: highlightSQL(sql) }}
           />

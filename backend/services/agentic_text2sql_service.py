@@ -976,7 +976,7 @@ Respond in JSON format:
                 logger.warning(f"Critical error detected: {error_msg}")
             else:
                 # Non-critical error, proceed
-                issues.append(f"Non-critical error: {error_msg}")
+                issues.append(f"{error_msg}")
                 logger.info(f"Non-critical error (proceeding): {error_msg}")
         
         # Empty results check (informational, not critical)

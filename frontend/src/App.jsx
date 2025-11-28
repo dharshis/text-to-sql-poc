@@ -27,7 +27,6 @@ import ResultsDisplay from './components/ResultsDisplay';
 import InsightCard from './components/InsightCard';
 import ClarificationDialog from './components/ClarificationDialog';
 import IterationIndicator from './components/IterationIndicator';
-import ReflectionSummary from './components/ReflectionSummary';
 import ContextBadge from './components/ContextBadge';
 import ConversationPanel from './components/ConversationPanel';
 import ClientSelector from './components/ClientSelector';
@@ -303,171 +302,200 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="h3" component="h1" sx={{ fontWeight: 600 }}>
-              Text-to-SQL Query Tool
+      <Box sx={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+        {/* Left Panel - Search Bar (40%) */}
+        <Box
+          sx={{
+            width: '40%',
+            flexShrink: 0,
+            height: '100vh',
+            borderRight: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: 'background.paper',
+            overflowY: 'auto',
+            overflowX: 'hidden'
+          }}
+        >
+          <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* Title */}
+            <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
+              Smart Insight Generator
             </Typography>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              {/* Agentic Mode Toggle */}
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={agenticMode}
-                    onChange={(e) => setAgenticMode(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label={agenticMode ? '🤖 Agentic Mode' : '⚡ Classic Mode'}
+            {/* Client Selector */}
+            <ClientSelector
+              clients={clients}
+              selectedClientId={selectedClientId}
+              onClientChange={setSelectedClientId}
+              loading={clientsLoading}
+            />
+
+            {/* Search Bar */}
+            <SearchBar
+              clientId={selectedClientId}
+              onSubmit={handleQuerySubmit}
+              loading={loading}
+              disabled={!selectedClientId}
+            />
+
+            {/* Iteration Indicator */}
+            {loading && agenticData?.iterations && (
+              <IterationIndicator
+                iteration={agenticData.iterations}
+                maxIterations={10}
               />
-              
-              {/* Story 7.3: History button (AC6) */}
-              {agenticMode && (
-                <IconButton 
-                  onClick={() => setConversationPanelOpen(true)}
-                  aria-label="conversation history"
-                  title="View conversation history (Cmd/Ctrl + H)"
-                >
-                  <Badge badgeContent={conversationHistory.length} color="primary">
-                    <ChatIcon />
-                  </Badge>
-                </IconButton>
-              )}
-              
-              {/* Backend Health Status */}
-              {healthStatus && (
-                <Chip
-                  icon={healthStatus.status === 'healthy' ? <CheckCircle /> : <ErrorIcon />}
-                  label={`Backend: ${healthStatus.status || 'Unknown'}`}
-                  color={healthStatus.status === 'healthy' ? 'success' : 'error'}
-                  variant="outlined"
-                />
-              )}
-            </Box>
+            )}
           </Box>
-
-          <Typography variant="body1" color="text.secondary">
-            {agenticMode 
-              ? '🤖 AI agents clarify, plan, and explain your queries with natural language insights'
-              : '⚡ Classic mode: Fast SQL generation without agent workflow'
-            }
-          </Typography>
         </Box>
 
-        {/* Backend Connection Error */}
-        {!healthStatus || healthStatus.status !== 'healthy' && (
-          <Alert severity="warning" sx={{ mb: 3 }}>
-            <Typography variant="subtitle2">
-              Backend connection issue
-            </Typography>
-            <Typography variant="body2">
-              Make sure the backend server is running on http://localhost:5001
-            </Typography>
-          </Alert>
-        )}
+        {/* Right Panel - All Other Components (60%) */}
+        <Box
+          sx={{
+            width: '60%',
+            flexShrink: 0,
+            height: '100vh',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            backgroundColor: 'background.default'
+          }}
+        >
+          <Box sx={{ py: 4, px: 3, width: '100%', boxSizing: 'border-box' }}>
+            {/* Header */}
+            <Box sx={{ mb: 4, width: '100%' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 2 }}>
+                <Typography variant="h4" component="h2" sx={{ fontWeight: 600 }}>
+                  Insights
+                </Typography>
 
-        {/* Client Selector */}
-        <Box sx={{ mb: 3 }}>
-          <ClientSelector
-            clients={clients}
-            selectedClientId={selectedClientId}
-            onClientChange={setSelectedClientId}
-            loading={clientsLoading}
-          />
-        </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                  {/* Agentic Mode Toggle */}
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={agenticMode}
+                        onChange={(e) => setAgenticMode(e.target.checked)}
+                        color="primary"
+                      />
+                    }
+                    label={agenticMode ? '🤖 Agentic Mode' : '⚡ Classic Mode'}
+                  />
 
-        {/* Search Bar */}
-        <Box sx={{ mb: 4 }}>
-          <SearchBar
-            clientId={selectedClientId}
-            onSubmit={handleQuerySubmit}
-            loading={loading}
-            disabled={!selectedClientId}
-          />
-          
-          {/* Iteration Indicator (appears near search) */}
-          {loading && agenticData?.iterations && (
-            <Box sx={{ mt: 1 }}>
-              <IterationIndicator 
-                iteration={agenticData.iterations} 
-                maxIterations={10} 
-              />
+                  {/* Story 7.3: History button (AC6) */}
+                  {agenticMode && (
+                    <IconButton
+                      onClick={() => setConversationPanelOpen(true)}
+                      aria-label="conversation history"
+                      title="View conversation history (Cmd/Ctrl + H)"
+                    >
+                      <Badge badgeContent={conversationHistory.length} color="primary">
+                        <ChatIcon />
+                      </Badge>
+                    </IconButton>
+                  )}
+
+                  {/* Backend Health Status */}
+                  {healthStatus && (
+                    <Chip
+                      icon={healthStatus.status === 'healthy' ? <CheckCircle /> : <ErrorIcon />}
+                      label={`Backend: ${healthStatus.status || 'Unknown'}`}
+                      color={healthStatus.status === 'healthy' ? 'success' : 'error'}
+                      variant="outlined"
+                    />
+                  )}
+                </Box>
+              </Box>
+
+              <Typography variant="body1" color="text.secondary">
+                {agenticMode
+                  ? '🤖 AI agents clarify, plan, and explain your queries with natural language insights'
+                  : '⚡ Classic mode: Fast SQL generation without agent workflow'
+                }
+              </Typography>
             </Box>
-          )}
-        </Box>
-        
-        {/* Context Badge (for follow-ups) - Story 7.3: Added clear button */}
-        {agenticMode && agenticData?.is_followup && (
-          <ContextBadge 
-            previousQuery={agenticData.resolved_query} 
-            isFollowup={agenticData.is_followup}
-            onClear={handleClearConversation}
-          />
-        )}
-        
-        {/* Clarified Query Display */}
-        {clarifiedQuery && (
-          <Alert 
-            severity="info" 
-            sx={{ mb: 2 }}
-            onClose={() => setClarifiedQuery(null)}
-          >
-            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-              📝 Your query was clarified:
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Original:</strong> "{clarifiedQuery.original}"
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Your clarification:</strong> "{clarifiedQuery.clarification}"
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 1, color: 'primary.main', fontWeight: 500 }}>
-              → Running: "{clarifiedQuery.combined}"
-            </Typography>
-          </Alert>
-        )}
-        
-        {/* Agentic Components (Architecture Section 9.2) */}
-        {agenticMode && results && (
-          <>
-            {/* PRIMARY: Insight Card at TOP */}
-            <InsightCard explanation={agenticData?.explanation} />
-            
-            {/* Quality Check (collapsible) */}
-            <ReflectionSummary reflection={agenticData?.reflection} />
-          </>
-        )}
 
-        {/* Results Display */}
-        <ResultsDisplay
-          loading={loading}
-          error={error}
-          results={results}
-        />
-        
-        {/* Clarification Dialog */}
-        <ClarificationDialog
-          open={clarificationDialog.open}
-          questions={clarificationDialog.questions}
-          onSubmit={handleClarificationSubmit}
-          onClose={() => setClarificationDialog({ ...clarificationDialog, open: false })}
-        />
-        
-        {/* Story 7.3: Conversation History Panel */}
-        {agenticMode && (
-          <ConversationPanel
-            open={conversationPanelOpen}
-            onClose={() => setConversationPanelOpen(false)}
-            history={conversationHistory}
-            currentQueryIndex={currentQueryIndex}
-            onClearConversation={handleClearConversation}
-            onQueryClick={(index) => console.log('Query clicked:', index)}
-          />
-        )}
-      </Container>
+            {/* Backend Connection Error */}
+            {!healthStatus || healthStatus.status !== 'healthy' && (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                <Typography variant="subtitle2">
+                  Backend connection issue
+                </Typography>
+                <Typography variant="body2">
+                  Make sure the backend server is running on http://localhost:5001
+                </Typography>
+              </Alert>
+            )}
+
+            {/* Context Badge (for follow-ups) - Story 7.3: Added clear button */}
+            {agenticMode && agenticData?.is_followup && (
+              <ContextBadge
+                previousQuery={agenticData.resolved_query}
+                isFollowup={agenticData.is_followup}
+                onClear={handleClearConversation}
+              />
+            )}
+
+            {/* Clarified Query Display */}
+            {clarifiedQuery && (
+              <Alert
+                severity="info"
+                sx={{ mb: 2 }}
+                onClose={() => setClarifiedQuery(null)}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                  📝 Your query was clarified:
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  <strong>Original:</strong> "{clarifiedQuery.original}"
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  <strong>Your clarification:</strong> "{clarifiedQuery.clarification}"
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1, color: 'primary.main', fontWeight: 500 }}>
+                  → Running: "{clarifiedQuery.combined}"
+                </Typography>
+              </Alert>
+            )}
+
+            {/* Agentic Components (Architecture Section 9.2) */}
+            {agenticMode && results && (
+              <>
+                {/* PRIMARY: Insight Card at TOP */}
+                <InsightCard explanation={agenticData?.explanation} />
+              </>
+            )}
+
+            {/* Results Display */}
+            <ResultsDisplay
+              loading={loading}
+              error={error}
+              results={results}
+              reflection={agenticMode ? agenticData?.reflection : null}
+            />
+
+            {/* Clarification Dialog */}
+            <ClarificationDialog
+              open={clarificationDialog.open}
+              questions={clarificationDialog.questions}
+              onSubmit={handleClarificationSubmit}
+              onClose={() => setClarificationDialog({ ...clarificationDialog, open: false })}
+            />
+
+            {/* Story 7.3: Conversation History Panel */}
+            {agenticMode && (
+              <ConversationPanel
+                open={conversationPanelOpen}
+                onClose={() => setConversationPanelOpen(false)}
+                history={conversationHistory}
+                currentQueryIndex={currentQueryIndex}
+                onClearConversation={handleClearConversation}
+                onQueryClick={(index) => console.log('Query clicked:', index)}
+              />
+            )}
+          </Box>
+        </Box>
+      </Box>
     </ThemeProvider>
   );
 }

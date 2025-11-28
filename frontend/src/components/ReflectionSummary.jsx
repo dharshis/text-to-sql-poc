@@ -32,10 +32,10 @@ const ReflectionSummary = ({ reflection }) => {
   return (
     <Accordion
       defaultExpanded={false}
-      sx={{ mb: 2 }}
+      sx={{ mb: 2, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Box display="flex" alignItems="center" gap={1}>
+        <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
           {is_acceptable ? (
             <>
               <CheckCircleIcon color="success" />

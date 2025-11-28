@@ -25,6 +25,16 @@ const SearchBar = ({ clientId, onSubmit, loading, disabled }) => {
     }
   };
 
+  const handleKeyDown = (e) => {
+    // Submit on Enter (without Shift key)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!isSubmitDisabled) {
+        handleSubmit(e);
+      }
+    }
+  };
+
   const isSubmitDisabled = !clientId || !query.trim() || loading || disabled;
 
   return (
@@ -43,10 +53,11 @@ const SearchBar = ({ clientId, onSubmit, loading, disabled }) => {
           placeholder="e.g., Show me electric vehicle market trends from 2020 to 2023"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
           disabled={loading || disabled}
           sx={{ mb: 2 }}
           helperText={
-            disabled 
+            disabled
               ? "Please select a client above to start querying"
               : "Ask questions about market size, trends, forecasts, or regional analysis"
           }
