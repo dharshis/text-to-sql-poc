@@ -203,3 +203,6 @@ secrets.json
 # ============================================
 .local/
 local_settings.py
+
+
+.cursor/
