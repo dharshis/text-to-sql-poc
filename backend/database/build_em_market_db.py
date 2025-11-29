@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data" / "em_market"
-DB_PATH = PROJECT_ROOT / "data" / "em_market.db"
+DB_PATH = PROJECT_ROOT / "data" / "em_market" / "em_market.db"
 
 
 def get_csv_files() -> List[Path]:

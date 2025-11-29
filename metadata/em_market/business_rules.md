@@ -10,10 +10,37 @@ Dim_Corporation (corp_id) ← FILTERING HAPPENS HERE
   └─ Dim_Brand (brand_id, corp_id FK)
       └─ Dim_SubBrand (subbrand_id, brand_id FK)
           └─ Dim_Product_SKU (sku_id, subbrand_id FK)
-              └─ Fact_Sales_Transactions (sku_id FK)
+              └─ Fact_Sales_Transactions (sku_id FK) ← Use this for queries
 ```
 
-**Critical**: All queries MUST filter by `corp_id` through the `Dim_Brand` table to enforce corporation-level data isolation.
+**Critical**: All queries MUST filter by `corp_id` through the brand hierarchy to enforce corporation-level data isolation.
+
+**Note**: Use **Fact_Sales_Transactions** (not Fact_Market_Summary) for all queries because it has direct SKU links. Fact_Market_Summary requires Bridge_Market_SKU which is not available in the current dataset.
+
+## Database Schema Overview
+
+### Fact Tables
+- **Fact_Market_Summary**: Aggregate market size data (total market value/volume) by market definition, geography, and period
+- **Fact_Sales_Transactions**: Detailed sales transactions by SKU, geography, and period
+
+### Dimension Tables
+- **Dim_Corporation**: Parent companies (corp_id, corp_name)
+- **Dim_Brand**: Brands owned by corporations (brand_id, brand_name, corp_id)
+- **Dim_SubBrand**: Brand variants (subbrand_id, subbrand_name, brand_id)
+- **Dim_Product_SKU**: Individual products (sku_id, sku_name, subbrand_id)
+- **Dim_Geography**: Geographic locations (geo_id, country_name, region)
+- **Dim_Period**: Time periods (period_id, fiscal_year, quarter, month_name, period_type)
+- **Dim_Market_Definition**: Market category definitions (market_def_id, market_name, category)
+
+### Bridge Table
+- **Bridge_Market_SKU**: Many-to-many relationship between SKUs and market definitions
+
+### Time Handling
+- **Dim_Period table EXISTS** - join to this table for time-based queries
+- **Columns**: period_id (PK), fiscal_year, quarter, month_name, period_type
+- **Granularity**: Monthly data (202201 = January 2022, 202202 = February 2022, etc.)
+- **Year range**: Typically 2022-2024 in sample data
+- **Format**: period_id is YYYYMM format (e.g., 202401 = January 2024)
 
 ## Filtering Examples
 
@@ -29,331 +56,212 @@ WHERE b.corp_id = {client_id}
 ORDER BY brand_name
 ```
 
-### Example 2: Sales transactions with brand join
+### Example 2: Market size by brand (requires join through hierarchy)
 ```sql
--- User asks: "Total sales by brand"
-SELECT b.brand_name, SUM(f.value_sold_usd) as total_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-WHERE b.corp_id = {client_id}
-GROUP BY b.brand_name
-ORDER BY total_sales DESC
+-- User asks: "What is the total market size for my brands?"
+SELECT b.brand_name,
+       dp.fiscal_year,
+       SUM(fms.total_market_value_usd) as total_market_value
+FROM Fact_Market_Summary fms
+JOIN Dim_Period dp ON fms.period_id = dp.period_id
+JOIN Bridge_Market_SKU bms ON fms.market_def_id = bms.market_def_id
+JOIN Dim_Product_SKU dps ON bms.sku_id = dps.sku_id
+JOIN Dim_SubBrand dsb ON dps.subbrand_id = dsb.subbrand_id
+JOIN Dim_Brand db ON dsb.brand_id = db.brand_id
+WHERE db.corp_id = {client_id}
+GROUP BY b.brand_name, dp.fiscal_year
+ORDER BY dp.fiscal_year, total_market_value DESC
 ```
 
-### Example 3: Multi-table join with corp_id filter
+### Example 3: Market size by geography
 ```sql
--- User asks: "Sales by brand and country"
-SELECT b.brand_name, g.country_name,
-       SUM(f.value_sold_usd) as total_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Geography g ON f.geo_id = g.geo_id
-WHERE b.corp_id = {client_id}
-GROUP BY b.brand_name, g.country_name
-ORDER BY total_sales DESC
-LIMIT 20
+-- User asks: "Show me market size by country"
+SELECT dg.country_name,
+       SUM(fms.total_market_value_usd) as total_value
+FROM Fact_Market_Summary fms
+JOIN Dim_Geography dg ON fms.geo_id = dg.geo_id
+JOIN Bridge_Market_SKU bms ON fms.market_def_id = bms.market_def_id
+JOIN Dim_Product_SKU dps ON bms.sku_id = dps.sku_id
+JOIN Dim_SubBrand dsb ON dps.subbrand_id = dsb.subbrand_id
+JOIN Dim_Brand db ON dsb.brand_id = db.brand_id
+WHERE db.corp_id = {client_id}
+GROUP BY dg.country_name
+ORDER BY total_value DESC
 ```
 
 ## Domain-Specific Patterns
 
 ### Pattern 1: Time Range Queries
-**Rule**: Use `Dim_Period.fiscal_year` for yearly analysis
-**Rule**: For "last N years", use: `fiscal_year >= (SELECT MAX(fiscal_year) - N FROM Dim_Period)`
+**Rule**: Use Dim_Period table for ALL time-based queries
+**Rule**: For "last N years", use: `fiscal_year >= (SELECT MAX(fiscal_year) FROM Dim_Period) - N + 1`
 **Rule**: NEVER use CURRENT_DATE, NOW(), or system date functions
+**Rule**: period_id format is YYYYMM (e.g., 202401 = January 2024, 202412 = December 2024)
 
 **Examples**:
 ```sql
 -- Last 3 years of data
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE p.fiscal_year >= (SELECT MAX(fiscal_year) - 2 FROM Dim_Period)
+JOIN Dim_Period dp ON fms.period_id = dp.period_id
+WHERE dp.fiscal_year >= (SELECT MAX(fiscal_year) - 2 FROM Dim_Period)
 
 -- Latest available year
-WHERE p.fiscal_year = (SELECT MAX(fiscal_year) FROM Dim_Period)
+WHERE dp.fiscal_year = (SELECT MAX(fiscal_year) FROM Dim_Period)
 
--- Specific year
-WHERE p.fiscal_year = 2024
+-- Specific year (2024)
+WHERE dp.fiscal_year = 2024
+
+-- Specific quarter
+WHERE dp.fiscal_year = 2024 AND dp.quarter = 1
+
+-- Year-over-year comparison
+WHERE dp.fiscal_year IN (2023, 2024)
 ```
 
 ### Pattern 2: Geographic Filters
-**Rule**: Join through Dim_Geography for country and regional data
+**Rule**: Join through Dim_Geography for location-based queries
 **Rule**: Always include corp_id filter even with geography
 
 **Examples**:
 ```sql
 -- Specific country
-JOIN Dim_Geography g ON f.geo_id = g.geo_id
-WHERE g.country_name = 'United States'
-  AND b.corp_id = {client_id}
-
--- Multiple countries
-WHERE g.country_name IN ('United States', 'United Kingdom', 'Germany')
+JOIN Dim_Geography dg ON fms.geo_id = dg.geo_id
+WHERE dg.country_name = 'United States'
+  AND db.corp_id = {client_id}
 
 -- Regional analysis
-WHERE g.region_name = 'North America'
+WHERE dg.region = 'North America'
 ```
 
-### Pattern 3: Category Analysis
-**Rule**: Dim_Product_SKU has category_name field for product categorization
-**Rule**: Use for category-level grouping and filtering
+### Pattern 3: Brand Hierarchy Navigation
+**Rule**: Must traverse FULL hierarchy to reach corp_id filter
+**Rule**: Join path: Fact → Bridge_Market_SKU → Dim_Product_SKU → Dim_SubBrand → Dim_Brand
 
-**Examples**:
+**Standard Join Pattern**:
 ```sql
--- Category level
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-WHERE sku.category_name = 'Soft Drinks'
-
--- Multiple categories
-WHERE sku.category_name IN ('Soft Drinks', 'Juice', 'Water')
+FROM Fact_Market_Summary fms
+JOIN Bridge_Market_SKU bms ON fms.market_def_id = bms.market_def_id
+JOIN Dim_Product_SKU dps ON bms.sku_id = dps.sku_id
+JOIN Dim_SubBrand dsb ON dps.subbrand_id = dsb.subbrand_id
+JOIN Dim_Brand db ON dsb.brand_id = db.brand_id
+WHERE db.corp_id = {client_id}
 ```
 
-### Pattern 4: Product Hierarchy Navigation
-**Rule**: Navigate from SKU → SubBrand → Brand → Corporation
-**Rule**: ALWAYS join through this hierarchy to reach corp_id filter
+### Pattern 4: Market Definition
+**Rule**: Bridge_Market_SKU connects products to market definitions
+**Rule**: Use Dim_Market_Definition for market category information
 
-**Example**:
+## Common Query Patterns
+
+### Query 1: Sales trend over time (use Fact_Sales_Transactions)
 ```sql
--- Full hierarchy join for corp_id filtering
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-WHERE b.corp_id = {client_id}
+-- Natural language: "Show me the sales trend in 2023"
+-- Note: Use Fact_Sales_Transactions which has direct SKU links
+-- Important: For quarterly trends, create a readable quarter label as first column
+SELECT CASE dp.quarter
+         WHEN 1 THEN 'Q1 ' || CAST(dp.fiscal_year AS TEXT)
+         WHEN 2 THEN 'Q2 ' || CAST(dp.fiscal_year AS TEXT)
+         WHEN 3 THEN 'Q3 ' || CAST(dp.fiscal_year AS TEXT)
+         WHEN 4 THEN 'Q4 ' || CAST(dp.fiscal_year AS TEXT)
+       END as quarter_label,
+       SUM(fst.value_sold_usd) as total_sales_usd,
+       SUM(fst.volume_sold_std) as total_volume
+FROM Fact_Sales_Transactions fst
+JOIN Dim_Period dp ON fst.period_id = dp.period_id
+JOIN Dim_Product_SKU dps ON fst.sku_id = dps.sku_id
+JOIN Dim_SubBrand dsb ON dps.subbrand_id = dsb.subbrand_id
+JOIN Dim_Brand db ON dsb.brand_id = db.brand_id
+WHERE dp.fiscal_year = 2023
+  AND db.corp_id = {client_id}
+GROUP BY dp.quarter, dp.fiscal_year
+ORDER BY dp.quarter
 ```
 
-## Common Table Relationships
-
-```
-Fact_Sales_Transactions:
-  - period_id → Dim_Period (fiscal_year, quarter, month_name)
-  - geo_id → Dim_Geography (country_name, region_name)
-  - sku_id → Dim_Product_SKU (category_name, subbrand_id)
-  - value_sold_usd (sales revenue in USD)
-  - volume_sold_std (sales volume in standard units)
-  - units_sold (number of units)
-  - is_promotion (0 = regular, 1 = promotional)
-
-Dim_Product_SKU:
-  - sku_id (PK)
-  - sku_description
-  - subbrand_id → Dim_SubBrand
-  - category_name
-  - form_factor, pack_type, pack_size
-
-Dim_SubBrand:
-  - subbrand_id (PK)
-  - subbrand_name
-  - brand_id → Dim_Brand
-
-Dim_Brand:
-  - brand_id (PK)
-  - brand_name
-  - corp_id (FK to Dim_Corporation) ← FILTER BY THIS
-
-Dim_Period:
-  - period_id (PK)
-  - fiscal_year (integer, e.g., 2024)
-  - quarter (1-4)
-  - month_name
-
-Dim_Geography:
-  - geo_id (PK)
-  - country_name
-  - region_name
-  - currency_code
-```
-
-## Example Queries
-
-### Query 1: Top 10 brands by sales value
+### Query 2: Top brands by sales
 ```sql
 -- Natural language: "Show me top 10 brands by sales"
-SELECT b.brand_name, SUM(f.value_sold_usd) as total_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-WHERE b.corp_id = {client_id}
-GROUP BY b.brand_name
+SELECT db.brand_name,
+       SUM(fst.value_sold_usd) as total_sales
+FROM Fact_Sales_Transactions fst
+JOIN Dim_Product_SKU dps ON fst.sku_id = dps.sku_id
+JOIN Dim_SubBrand dsb ON dps.subbrand_id = dsb.subbrand_id
+JOIN Dim_Brand db ON dsb.brand_id = db.brand_id
+WHERE db.corp_id = {client_id}
+GROUP BY db.brand_name
 ORDER BY total_sales DESC
 LIMIT 10
 ```
 
-### Query 2: Geographic analysis - sales by country
+### Query 3: Sales by country and year
 ```sql
--- Natural language: "Sales by country last 3 years"
-SELECT g.country_name, p.fiscal_year, SUM(f.value_sold_usd) as total
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Geography g ON f.geo_id = g.geo_id
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE b.corp_id = {client_id}
-  AND p.fiscal_year >= (SELECT MAX(fiscal_year) - 2 FROM Dim_Period)
-GROUP BY g.country_name, p.fiscal_year
-ORDER BY p.fiscal_year, total DESC
+-- Natural language: "Sales by country for the last 2 years"
+SELECT dg.country_name,
+       dp.fiscal_year,
+       SUM(fst.value_sold_usd) as total_value
+FROM Fact_Sales_Transactions fst
+JOIN Dim_Period dp ON fst.period_id = dp.period_id
+JOIN Dim_Geography dg ON fst.geo_id = dg.geo_id
+JOIN Dim_Product_SKU dps ON fst.sku_id = dps.sku_id
+JOIN Dim_SubBrand dsb ON dps.subbrand_id = dsb.subbrand_id
+JOIN Dim_Brand db ON dsb.brand_id = db.brand_id
+WHERE db.corp_id = {client_id}
+  AND dp.fiscal_year >= (SELECT MAX(fiscal_year) - 1 FROM Dim_Period)
+GROUP BY dg.country_name, dp.fiscal_year
+ORDER BY dp.fiscal_year, total_value DESC
 ```
 
-### Query 3: Category breakdown
+### Query 4: Quarterly breakdown
 ```sql
--- Natural language: "Sales by category"
-SELECT sku.category_name, SUM(f.value_sold_usd) as total_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-WHERE b.corp_id = {client_id}
-GROUP BY sku.category_name
+-- Natural language: "Show quarterly breakdown for 2023"
+SELECT dp.quarter,
+       COUNT(DISTINCT fst.transaction_id) as transaction_count,
+       SUM(fst.value_sold_usd) as total_value,
+       SUM(fst.volume_sold_std) as total_volume
+FROM Fact_Sales_Transactions fst
+JOIN Dim_Period dp ON fst.period_id = dp.period_id
+JOIN Dim_Product_SKU dps ON fst.sku_id = dps.sku_id
+JOIN Dim_SubBrand dsb ON dps.subbrand_id = dsb.subbrand_id
+JOIN Dim_Brand db ON dsb.brand_id = db.brand_id
+WHERE dp.fiscal_year = 2023
+  AND db.corp_id = {client_id}
+GROUP BY dp.quarter
+ORDER BY dp.quarter
+```
+
+### Query 5: Sales by product
+```sql
+-- Natural language: "Show me sales by product"
+SELECT dps.sku_name,
+       dsb.subbrand_name,
+       db.brand_name,
+       SUM(fst.value_sold_usd) as total_sales
+FROM Fact_Sales_Transactions fst
+JOIN Dim_Product_SKU dps ON fst.sku_id = dps.sku_id
+JOIN Dim_SubBrand dsb ON dps.subbrand_id = dsb.subbrand_id
+JOIN Dim_Brand db ON dsb.brand_id = db.brand_id
+WHERE db.corp_id = {client_id}
+GROUP BY dps.sku_name, dsb.subbrand_name, db.brand_name
 ORDER BY total_sales DESC
-```
-
-### Query 4: Year-over-year growth
-```sql
--- Natural language: "Show year over year sales growth"
-SELECT b.brand_name, p.fiscal_year,
-       SUM(f.value_sold_usd) as sales,
-       LAG(SUM(f.value_sold_usd)) OVER (PARTITION BY b.brand_name ORDER BY p.fiscal_year) as prev_year_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE b.corp_id = {client_id}
-GROUP BY b.brand_name, p.fiscal_year
-ORDER BY b.brand_name, p.fiscal_year
-```
-
-### Query 5: Brand performance in specific geography
-```sql
--- Natural language: "How are my brands performing in the United States?"
-SELECT b.brand_name,
-       SUM(f.value_sold_usd) as sales,
-       SUM(f.volume_sold_std) as volume,
-       SUM(f.units_sold) as units
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Geography g ON f.geo_id = g.geo_id
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE b.corp_id = {client_id}
-  AND g.country_name = 'United States'
-  AND p.fiscal_year = (SELECT MAX(fiscal_year) FROM Dim_Period)
-GROUP BY b.brand_name
-ORDER BY sales DESC
-```
-
-### Query 6: Promotional vs Regular sales
-```sql
--- Natural language: "Compare promotional vs regular sales"
-SELECT b.brand_name,
-       SUM(CASE WHEN f.is_promotion = 0 THEN f.value_sold_usd ELSE 0 END) as regular_sales,
-       SUM(CASE WHEN f.is_promotion = 1 THEN f.value_sold_usd ELSE 0 END) as promo_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE b.corp_id = {client_id}
-  AND p.fiscal_year = (SELECT MAX(fiscal_year) FROM Dim_Period)
-GROUP BY b.brand_name
-ORDER BY regular_sales + promo_sales DESC
-```
-
-### Query 7: Sub-brand analysis
-```sql
--- Natural language: "Show me sub-brands for Coca-Cola"
-SELECT b.brand_name, sb.subbrand_name, SUM(f.value_sold_usd) as total_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-WHERE b.corp_id = {client_id}
-  AND b.brand_name LIKE '%Coca-Cola%'
-GROUP BY b.brand_name, sb.subbrand_name
-ORDER BY total_sales DESC
-```
-
-### Query 8: Time series trend
-```sql
--- Natural language: "Sales trend over last 5 years"
-SELECT p.fiscal_year, SUM(f.value_sold_usd) as total_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE b.corp_id = {client_id}
-  AND p.fiscal_year >= (SELECT MAX(fiscal_year) - 4 FROM Dim_Period)
-GROUP BY p.fiscal_year
-ORDER BY p.fiscal_year
-```
-
-### Query 9: Multi-dimensional analysis
-```sql
--- Natural language: "Sales by brand, country, and category"
-SELECT b.brand_name, g.country_name, sku.category_name,
-       SUM(f.value_sold_usd) as total_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Geography g ON f.geo_id = g.geo_id
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE b.corp_id = {client_id}
-  AND p.fiscal_year = (SELECT MAX(fiscal_year) FROM Dim_Period)
-GROUP BY b.brand_name, g.country_name, sku.category_name
-HAVING SUM(f.value_sold_usd) > 10000
-ORDER BY total_sales DESC
-LIMIT 50
-```
-
-### Query 10: Regional rollup
-```sql
--- Natural language: "Sales by region"
-SELECT g.region_name, SUM(f.value_sold_usd) as total_sales
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Geography g ON f.geo_id = g.geo_id
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE b.corp_id = {client_id}
-  AND p.fiscal_year = (SELECT MAX(fiscal_year) FROM Dim_Period)
-GROUP BY g.region_name
-ORDER BY total_sales DESC
-```
-
-### Query 11: Market trend analysis
-```sql
--- Natural language: "Show me the market trend in 2024"
-SELECT p.fiscal_year, p.quarter,
-       SUM(f.value_sold_usd) as quarterly_sales,
-       SUM(f.volume_sold_std) as quarterly_volume
-FROM Fact_Sales_Transactions f
-JOIN Dim_Product_SKU sku ON f.sku_id = sku.sku_id
-JOIN Dim_SubBrand sb ON sku.subbrand_id = sb.subbrand_id
-JOIN Dim_Brand b ON sb.brand_id = b.brand_id
-JOIN Dim_Period p ON f.period_id = p.period_id
-WHERE b.corp_id = {client_id}
-  AND p.fiscal_year = 2024
-GROUP BY p.fiscal_year, p.quarter
-ORDER BY p.quarter
+LIMIT 20
 ```
 
 ## Important Reminders
 
-1. **ALWAYS** filter by `corp_id = {client_id}` through the complete product hierarchy join:
+1. **ALWAYS** use **Fact_Sales_Transactions** (not Fact_Market_Summary) for queries
+
+2. **ALWAYS** filter by `corp_id = {client_id}` through the full hierarchy:
    - Fact_Sales_Transactions → Dim_Product_SKU → Dim_SubBrand → Dim_Brand
-2. **NEVER** use CURRENT_DATE or NOW() - use MAX(fiscal_year) from Dim_Period
-3. **Use** `Dim_Period.fiscal_year` for time-based queries
-4. **Join** through the product hierarchy FIRST to ensure corp_id filtering
-5. **Limit** results to 100 rows unless user specifies otherwise
-6. **Order** results meaningfully (by value DESC or by date ASC)
-7. **Use** table aliases (f, sku, sb, b, g, p) for readability
-8. **Apply** aggregate functions (SUM, AVG, COUNT) appropriately for metrics
-9. **Remember**: The only fact table available is `Fact_Sales_Transactions`
+
+3. **ALWAYS** join to Dim_Period for time-based queries (don't use raw period_id)
+
+4. **NEVER** use CURRENT_DATE or NOW() - use MAX(fiscal_year) from Dim_Period
+
+5. **Period_id format**: YYYYMM (202401 = January 2024, not 2024-01)
+
+6. **Time granularity**: Monthly (use fiscal_year and quarter for rollups)
+
+7. **Available years**: Check the actual data, sample data is typically 2022-2023
+
+8. **Limit** results to 100 rows unless user specifies otherwise
+
+9. **Order** results meaningfully (by value DESC or by time ASC)
+
+10. **Corp_id filtering is MANDATORY** for all queries to enforce data isolation

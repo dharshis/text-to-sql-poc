@@ -100,6 +100,10 @@ class AgenticText2SQLService:
 
         # Session storage (Architecture Section 7.1 - in-memory for POC)
         self.chat_sessions = {}
+
+        # Load domain vocabulary from schema for keyword-based detection
+        self.domain_vocab = self._load_domain_vocabulary(dataset_id)
+
         logger.info(f"AgenticText2SQLService initialized for dataset: {dataset_id or 'default'}")
     
     def _get_chat_history(self, session_id: str) -> List[Dict]:
@@ -130,7 +134,49 @@ class AgenticText2SQLService:
             logger.info(f"Session {session_id}: trimmed {removed} old entries, keeping 10 most recent")
         
         logger.info(f"Session {session_id}: added entry, total={len(self.chat_sessions[session_id])}")
-    
+
+    def _load_domain_vocabulary(self, dataset_id: str) -> Dict[str, List[str]]:
+        """
+        Load or extract domain vocabulary for dataset.
+
+        Args:
+            dataset_id: Dataset identifier
+
+        Returns:
+            Dictionary with vocabulary (entities, metrics, dimensions)
+        """
+        if not dataset_id:
+            logger.warning("No dataset_id provided, using minimal fallback vocabulary")
+            return {
+                "entities": ["data", "records", "metric", "metrics"],
+                "metrics": ["value", "count", "total", "amount"],
+                "dimensions": ["category", "type", "group"]
+            }
+
+        try:
+            from services.domain_vocabulary import get_vocabulary
+            from config import Config
+
+            dataset_config = Config.get_dataset(dataset_id)
+            db_path = dataset_config['db_path']
+
+            vocabulary = get_vocabulary(dataset_id, db_path)
+            logger.info(f"Loaded domain vocabulary for {dataset_id}: "
+                       f"{len(vocabulary['entities'])} entities, "
+                       f"{len(vocabulary['metrics'])} metrics, "
+                       f"{len(vocabulary['dimensions'])} dimensions")
+
+            return vocabulary
+
+        except Exception as e:
+            logger.error(f"Failed to load domain vocabulary: {e}", exc_info=True)
+            # Return minimal fallback
+            return {
+                "entities": ["data", "records", "metric", "metrics"],
+                "metrics": ["value", "count", "total", "amount"],
+                "dimensions": ["category", "type", "group"]
+            }
+
     def _detect_followup(self, user_query: str, chat_history: List[Dict]) -> tuple:
         """
         Detect if query is a follow-up using keyword and context analysis.
@@ -168,12 +214,8 @@ class AgenticText2SQLService:
         
         # Check for complete queries (has main entity/action)
         # These indicate a standalone query rather than a follow-up
-        entity_keywords = [
-            "product", "products", "sales", "sale", "revenue", "client", "clients",
-            "region", "regions", "category", "categories", "customer", "customers",
-            "segment", "segments", "order", "orders", "transaction", "transactions",
-            "metric", "metrics", "data", "records", "report", "reports"
-        ]
+        # Use domain vocabulary extracted from schema
+        entity_keywords = self.domain_vocab.get("entities", [])
         
         # Action keywords that indicate complete queries
         complete_action_keywords = [
@@ -182,10 +224,9 @@ class AgenticText2SQLService:
         ]
         
         # Dimension modifiers that indicate follow-ups (overrides entity check)
-        dimension_modifiers = [
-            "by region", "by category", "by product", "by client",
-            "by customer", "by segment", "for region", "for category"
-        ]
+        # Build from domain vocabulary dimensions
+        dimension_keywords = self.domain_vocab.get("dimensions", [])
+        dimension_modifiers = [f"by {dim}" for dim in dimension_keywords] + [f"for {dim}" for dim in dimension_keywords]
         
         has_entity = any(word in query_lower for word in entity_keywords)
         has_complete_action = any(action in query_lower for action in complete_action_keywords)
@@ -640,15 +681,10 @@ Respond in JSON format:
         word_count = len(query.split())
         
         # Check if query has complete information
-        has_entity = any(word in query_lower for word in [
-            "product", "products", "sales", "sale", "customer", "customers",
-            "client", "clients", "order", "orders", "transaction", "transactions",
-            "market", "markets", "region", "regions", "country", "countries"
-        ])
-        has_metric = any(word in query_lower for word in [
-            "revenue", "quantity", "profit", "count", "total", "sum", "average",
-            "how much", "how many", "all", "list"
-        ])
+        # Use domain vocabulary extracted from schema
+        has_entity = any(word in query_lower for word in self.domain_vocab.get("entities", []))
+        has_metric = any(word in query_lower for word in self.domain_vocab.get("metrics", []) +
+                        ["how much", "how many", "all", "list"])
         has_action = any(word in query_lower for word in [
             "show", "list", "display", "get", "find", "compare", "analyze"
         ])
@@ -671,9 +707,11 @@ Respond in JSON format:
             
             # Dimension/location only (no entity or metric)
             # Examples: "south", "q4", "electronics", "by region"
-            location_words = ["north", "south", "east", "west", "q1", "q2", "q3", "q4"]
-            category_words = ["electronics", "furniture", "appliances", "fashion"]
-            has_only_location = any(word in query_lower for word in location_words + category_words)
+            # Use dimension keywords from vocabulary + time keywords
+            time_keywords = ["q1", "q2", "q3", "q4", "january", "february", "march", "april", "may", "june",
+                           "july", "august", "september", "october", "november", "december"]
+            dimension_words = self.domain_vocab.get("dimensions", []) + time_keywords
+            has_only_location = any(word in query_lower for word in dimension_words)
             
             if has_only_location and not (has_entity and has_metric):
                 questions.append("What data would you like to see?")
@@ -714,14 +752,9 @@ Respond in JSON format:
         
         # Check for top/best without sufficient criteria
         if ("top" in query_lower or "best" in query_lower):
-            has_entity_specific = any(word in query_lower for word in [
-                "product", "products", "sales", "sale", "customer", "customers",
-                "client", "clients", "market", "markets", "region", "regions", "country", "countries"
-            ])
-            has_metric_specific = any(word in query_lower for word in [
-                "revenue", "sales", "sold", "quantity", "profit", "popular", "selling",
-                "value", "units", "growth", "share", "size"
-            ])
+            # Use domain vocabulary extracted from schema
+            has_entity_specific = any(word in query_lower for word in self.domain_vocab.get("entities", []))
+            has_metric_specific = any(word in query_lower for word in self.domain_vocab.get("metrics", []))
             if not (has_entity_specific and has_metric_specific):
                 questions.append("By what measure? (e.g., revenue, units sold, market size, growth rate)")
         
@@ -875,9 +908,16 @@ Respond in JSON format:
                 custom_schema=schema,  # Use schema from active dataset
                 dataset_id=state.get("dataset_id", "sales")  # Pass dataset for filtering instructions
             )
-            
+
+            # Log raw response for debugging
+            logger.info(f"Raw Claude response (first 1000 chars): {sql_query[:1000]}...")
+            logger.debug(f"Full Claude response: {sql_query}")
+
             # Extract clean SQL (Architecture Section 5.3)
             sql = self._extract_sql(sql_query)
+
+            # Store raw response for chart metadata extraction
+            raw_claude_response = sql_query
             
             elapsed = (datetime.now() - start_time).total_seconds()
             logger.info(f"SQL generated in {elapsed:.2f}s: {sql[:100]}...")
@@ -905,9 +945,10 @@ Respond in JSON format:
                 }
             
             logger.info("✓ Security validation passed")
-            
+
             return {
                 "sql_query": sql,
+                "raw_sql_response": raw_claude_response,  # Store for chart metadata parsing
                 "security_validation": security_validation
             }
             
@@ -923,13 +964,13 @@ Respond in JSON format:
     def _extract_sql(self, sql_response: str) -> str:
         """
         Extract clean SQL from Claude response.
-        Removes markdown code blocks and extra whitespace.
+        Removes markdown code blocks, chart_metadata JSON, and extra whitespace.
         Architecture Reference: Section 5.3
         """
         logger.debug(f"Extracting SQL from response: {sql_response[:100]}...")
-        
+
         sql = sql_response.strip()
-        
+
         # Remove markdown code blocks (```sql ... ``` or ``` ... ```)
         if sql.startswith('```'):
             lines = sql.split('\n')
@@ -940,10 +981,150 @@ Respond in JSON format:
                     continue
                 sql_lines.append(line)
             sql = '\n'.join(sql_lines).strip()
-        
+
+        # Remove chart_metadata JSON if present (it will be parsed separately)
+        # Look for opening brace that starts the JSON object
+        chart_meta_pos = sql.find('{')
+        if chart_meta_pos != -1:
+            # Check if this looks like chart_metadata JSON (contains "chart_metadata" key)
+            remaining = sql[chart_meta_pos:]
+            if '"chart_metadata"' in remaining or "'chart_metadata'" in remaining:
+                # Remove everything from the opening brace onwards
+                sql = sql[:chart_meta_pos].strip()
+                logger.debug("Removed chart_metadata JSON from SQL")
+
         logger.debug(f"Extracted SQL: {sql[:100]}...")
-        
+
         return sql
+
+    def _parse_and_validate_chart_metadata(
+        self,
+        claude_response: str,
+        sql: str,
+        execution_result: Dict
+    ) -> Dict:
+        """
+        Extract and validate chart metadata from Claude's response.
+
+        Args:
+            claude_response: Raw response from Claude (may contain JSON)
+            sql: The generated SQL query
+            execution_result: Actual query results with columns
+
+        Returns:
+            Valid chart_metadata dict or fallback
+        """
+        import json
+        import re
+
+        logger.debug(f"Parsing chart metadata from response: {claude_response[:500]}...")
+
+        chart_metadata = None
+
+        # Strategy: Use brace-matching to extract nested JSON
+        # Find the position of "chart_metadata"
+        chart_meta_pos = claude_response.find('"chart_metadata"')
+        if chart_meta_pos != -1:
+            # Find the opening brace after "chart_metadata":
+            start_brace = claude_response.find('{', chart_meta_pos)
+            if start_brace != -1:
+                # Use a simple brace counter to find matching closing brace
+                brace_count = 0
+                i = start_brace
+                while i < len(claude_response):
+                    if claude_response[i] == '{':
+                        brace_count += 1
+                    elif claude_response[i] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            # Found matching closing brace
+                            json_str = claude_response[start_brace:i+1]
+                            try:
+                                chart_metadata = json.loads(json_str)
+                                logger.info("Successfully extracted chart_metadata using brace matching")
+                            except json.JSONDecodeError as e:
+                                logger.error(f"Failed to parse chart_metadata JSON: {e}")
+                                logger.debug(f"Attempted JSON: {json_str}")
+                                return self._fallback_chart_metadata(execution_result)
+                            break
+                    i += 1
+
+        if not chart_metadata:
+            logger.warning("No chart_metadata found in Claude response, using fallback")
+            return self._fallback_chart_metadata(execution_result)
+
+        # Validation: Ensure referenced columns exist in SQL results
+        actual_columns = execution_result.get("columns", [])
+
+        x_axis = chart_metadata.get("x_axis")
+        y_axes = chart_metadata.get("y_axes", [])
+
+        # Validate x_axis
+        if x_axis and x_axis not in actual_columns:
+            logger.warning(f"x_axis '{x_axis}' not in query columns: {actual_columns}")
+            chart_metadata["x_axis"] = actual_columns[0] if actual_columns else None
+
+        # Validate y_axes
+        valid_y_axes = [y for y in y_axes if y in actual_columns]
+        if not valid_y_axes and len(actual_columns) > 1:
+            valid_y_axes = actual_columns[1:]  # Fallback to remaining columns
+        chart_metadata["y_axes"] = valid_y_axes
+
+        # Add validation flag
+        chart_metadata["validated"] = True
+
+        logger.info(f"Chart metadata validated: type={chart_metadata.get('type')}, "
+                   f"x_axis={chart_metadata.get('x_axis')}, "
+                   f"y_axes={chart_metadata.get('y_axes')}, "
+                   f"recommended={chart_metadata.get('recommended')}")
+
+        return chart_metadata
+
+    def _fallback_chart_metadata(self, execution_result: Dict) -> Dict:
+        """
+        Generate fallback chart metadata when LLM doesn't provide it.
+        Uses simple heuristics similar to current frontend logic.
+
+        Args:
+            execution_result: Query execution results with columns and row_count
+
+        Returns:
+            Fallback chart metadata dict
+        """
+        columns = execution_result.get("columns", [])
+        row_count = execution_result.get("row_count", 0)
+
+        logger.warning("Using fallback chart metadata - LLM did not provide valid metadata")
+
+        if row_count > 100:
+            return {
+                "type": "table",
+                "x_axis": None,
+                "y_axes": [],
+                "recommended": False,
+                "reason": "Too many rows for effective visualization",
+                "validated": False
+            }
+
+        if len(columns) < 2:
+            return {
+                "type": "metric",
+                "x_axis": None,
+                "y_axes": columns,
+                "recommended": True,
+                "reason": "Single value - displayed as metric card",
+                "validated": False
+            }
+
+        # Simple heuristic: first col = x, rest = y
+        return {
+            "type": "bar",
+            "x_axis": columns[0],
+            "y_axes": columns[1:],
+            "recommended": True,
+            "reason": "Fallback visualization - LLM metadata unavailable",
+            "validated": False
+        }
     
     def _reflect_node(self, state: AgentState) -> Dict:
         """
@@ -1312,6 +1493,20 @@ Write as if explaining to a non-technical business user."""
         execution_result = state.get("execution_result")
         if execution_result:
             response["results"] = execution_result
+
+            # Parse and validate chart metadata from Claude response
+            try:
+                raw_sql_response = state.get("raw_sql_response", "")
+                chart_metadata = self._parse_and_validate_chart_metadata(
+                    claude_response=raw_sql_response,
+                    sql=state.get("sql_query", ""),
+                    execution_result=execution_result
+                )
+                response["chart_metadata"] = chart_metadata
+            except Exception as e:
+                logger.error(f"Failed to parse chart metadata: {e}", exc_info=True)
+                # Use fallback instead of failing the entire query
+                response["chart_metadata"] = self._fallback_chart_metadata(execution_result)
         
         # Include validation if available
         validation = state.get("validation_result")

@@ -49,6 +49,75 @@ BASE_LLM_INSTRUCTIONS = """You are an expert SQL query generator for SQLite data
 """
 
 
+# Visualization guidance for intelligent chart generation
+VISUALIZATION_INSTRUCTIONS = """
+## Visualization Guidance
+
+After generating SQL, analyze the query structure and determine optimal visualization:
+
+**Chart Type Selection Rules:**
+- **line**: Time series data (GROUP BY year/quarter/month/date)
+- **bar**: Categorical comparison (GROUP BY category/brand/region with aggregates)
+- **pie**: Composition/share analysis (percentage/share queries, ≤10 categories)
+- **metric**: Single aggregate value (COUNT(*), SUM without GROUP BY)
+- **table**: Complex multi-dimensional data or >50 rows
+
+**Axis Mapping:**
+- X-axis: The dimension being compared/analyzed (time, category, geography)
+- Y-axis: The measure(s) being aggregated (SUM, AVG, COUNT results)
+
+**Output Format:**
+Along with SQL, return chart_metadata as JSON:
+{
+  "chart_metadata": {
+    "type": "line|bar|pie|metric|table",
+    "x_axis": "column_name_from_select",
+    "y_axes": ["measure_column_1", "measure_column_2"],
+    "recommended": true|false,
+    "reason": "Explanation for chart choice or why not recommended"
+  }
+}
+
+**When NOT to recommend charts (recommended: false):**
+- Query returns >100 rows
+- No clear dimensional breakdown (all measures, no dimensions)
+- Highly complex multi-dimensional results
+- User explicitly asks for "table" or "list"
+
+**Examples:**
+
+Query: "Show market trend in 2024"
+SQL: SELECT year, SUM(market_size_value) as total_value ... GROUP BY year
+chart_metadata: {
+  "type": "line",
+  "x_axis": "year",
+  "y_axes": ["total_value"],
+  "recommended": true,
+  "reason": "Time series data with single measure - line chart shows trend clearly"
+}
+
+Query: "Top 10 brands by revenue"
+SQL: SELECT brand_name, SUM(revenue) as total_revenue ... ORDER BY total_revenue DESC LIMIT 10
+chart_metadata: {
+  "type": "bar",
+  "x_axis": "brand_name",
+  "y_axes": ["total_revenue"],
+  "recommended": true,
+  "reason": "Categorical ranking - bar chart emphasizes comparison"
+}
+
+Query: "List all transactions"
+SQL: SELECT * FROM transactions LIMIT 1000
+chart_metadata: {
+  "type": "table",
+  "x_axis": null,
+  "y_axes": [],
+  "recommended": false,
+  "reason": "Detailed transactional data with many columns - table view most appropriate"
+}
+"""
+
+
 class ClaudeService:
     """Service for interacting with Claude API to generate SQL queries."""
 
@@ -90,15 +159,18 @@ class ClaudeService:
             metadata_loader = MetadataLoader(dataset_id=dataset_id)
             # Load all metadata first
             metadata_loader.load_all()
-            # Load llm_instructions (file name without extension)
-            docs = metadata_loader.get_documents_by_file('llm_instructions')
+            # Try business_rules first, fallback to llm_instructions for backward compatibility
+            docs = metadata_loader.get_documents_by_file('business_rules')
+            if not docs:
+                docs = metadata_loader.get_documents_by_file('llm_instructions')
+
             if docs:
                 # Combine all sections
                 instructions = "\n\n".join([doc.content for doc in docs])
-                logger.info(f"Loaded dataset-specific instructions from llm_instructions.md ({len(instructions)} chars)")
+                logger.info(f"Loaded dataset-specific instructions ({len(instructions)} chars)")
                 return instructions
             else:
-                logger.warning(f"No llm_instructions.md found for dataset {dataset_id}, using generic instructions only")
+                logger.warning(f"No business_rules.md or llm_instructions.md found for dataset {dataset_id}, using generic instructions only")
                 return ""
         except Exception as e:
             logger.error(f"Error loading dataset instructions for {dataset_id}: {e}")
@@ -199,6 +271,9 @@ Generate the SQL query:"""
             "{FILTER_INSTRUCTION}",
             f"\n## Client Filtering Requirement\n\n{filter_instruction}\n"
         )
+
+        # Add visualization instructions
+        system_prompt += f"\n{VISUALIZATION_INSTRUCTIONS}\n"
 
         # Replace client_id placeholders in examples
         system_prompt = system_prompt.replace("{client_id}", str(client_id))

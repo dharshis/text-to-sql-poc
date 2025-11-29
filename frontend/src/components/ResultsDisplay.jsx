@@ -128,7 +128,11 @@ const ResultsDisplay = ({ loading, error, results, reflection }) => {
 
       {/* Data Visualization */}
       {results.results && results.results.length > 0 && (
-        <DataVisualization data={results.results} columns={results.columns} />
+        <DataVisualization
+          data={results.results}
+          columns={results.columns}
+          chartConfig={results.chart_metadata}
+        />
       )}
 
       {/* Data Table */}

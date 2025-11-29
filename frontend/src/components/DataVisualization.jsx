@@ -85,7 +85,16 @@ const formatNumber = (value) => {
   return value.toFixed(2);
 };
 
-const DataVisualization = ({ data, columns }) => {
+const DataVisualization = ({ data, columns, chartConfig }) => {
+  // chartConfig structure:
+  // {
+  //   type: "line|bar|pie|metric|table",
+  //   x_axis: "column_name",
+  //   y_axes: ["col1", "col2"],
+  //   recommended: true|false,
+  //   reason: "explanation"
+  // }
+
   if (!data || data.length === 0) {
     return (
       <Paper sx={{ p: 3, textAlign: 'center' }}>
@@ -96,8 +105,20 @@ const DataVisualization = ({ data, columns }) => {
     );
   }
 
-  const chartType = detectChartType(data, columns);
-  const { xKey, yKeys } = getChartKeys(columns);
+  // Use chartConfig if provided, fallback to current logic
+  const chartType = chartConfig?.type || detectChartType(data, columns);
+  const showChart = chartConfig?.recommended !== false;
+
+  // Use LLM-provided axis mappings or fallback to heuristic
+  let xKey, yKeys;
+  if (chartConfig?.x_axis && chartConfig?.y_axes) {
+    xKey = chartConfig.x_axis;
+    yKeys = chartConfig.y_axes;
+  } else {
+    const keys = getChartKeys(columns);
+    xKey = keys.xKey;
+    yKeys = keys.yKeys;
+  }
 
   if (!xKey || yKeys.length === 0) {
     return (
@@ -191,6 +212,23 @@ const DataVisualization = ({ data, columns }) => {
           ({chartType} chart, {data.length} data points)
         </Typography>
       </Typography>
+      {!showChart && chartConfig?.reason && (
+        <Box
+          sx={{
+            mt: 2,
+            p: 2,
+            backgroundColor: 'info.light',
+            borderRadius: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          <Typography variant="body2" color="text.primary">
+            ℹ️ {chartConfig.reason}
+          </Typography>
+        </Box>
+      )}
       <Box sx={{ mt: 2, width: '100%' }}>{renderChart()}</Box>
     </Paper>
   );
