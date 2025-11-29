@@ -160,6 +160,7 @@ function App() {
           iterations: data.iterations,
           is_followup: data.is_followup,
           resolved_query: data.resolved_query,
+          key_details: data.key_details,
         });
         
         // Transform agentic response to match ResultsDisplay format
@@ -462,7 +463,10 @@ function App() {
             {agenticMode && results && (
               <>
                 {/* PRIMARY: Insight Card at TOP */}
-                <InsightCard explanation={agenticData?.explanation} />
+                <InsightCard 
+                  explanation={agenticData?.explanation}
+                  keyDetails={agenticData?.key_details}
+                />
               </>
             )}
 

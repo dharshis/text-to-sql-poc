@@ -310,28 +310,33 @@ class Config:
     def get_client_config(cls, dataset_id: Optional[str] = None) -> Dict:
         """
         Get client/corporation configuration for a dataset.
-        
+
         Different datasets use different tables for "clients":
         - sales: uses 'clients' table with 'client_id' field
         - em_market: uses 'Dim_Corporation' table with 'corp_id' field
-        
+
         Args:
             dataset_id: Dataset identifier (defaults to active)
-            
+
         Returns:
             dict: Configuration with table_name, id_field, name_field
         """
         dataset = cls.get_dataset(dataset_id)
+
+        # Check if dataset has explicit clients configuration
+        if "clients" in dataset:
+            return dataset["clients"]
+
         client_iso = dataset.get("client_isolation", {})
-        
-        # Check if dataset has custom client mapping
+
+        # Check if dataset has custom client mapping in client_isolation
         if "client_table" in client_iso:
             return {
                 "table_name": client_iso["client_table"],
                 "id_field": client_iso["client_id_field"],
                 "name_field": client_iso["client_name_field"]
             }
-        
+
         # Default: use "clients" table
         return {
             "table_name": "clients",

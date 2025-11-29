@@ -37,7 +37,7 @@ class ValidationResult:
 
 def validate_sql_for_client_isolation(sql_query, expected_client_id, dataset_config=None):
     """
-    Validate SQL query for client data isolation (dataset-aware).
+    Validate SQL query for client data isolation (method-driven validation).
 
     This performs basic string-based validation for POC demonstration.
     In production, use a proper SQL parser (sqlparse, pglast, etc.).
@@ -45,20 +45,21 @@ def validate_sql_for_client_isolation(sql_query, expected_client_id, dataset_con
     Args:
         sql_query (str): SQL query to validate
         expected_client_id (int): Expected client ID that should be filtered
-        dataset_config (dict, optional): Dataset configuration with table info
+        dataset_config (dict, optional): Dataset configuration with client_isolation info
 
     Returns:
         ValidationResult: Validation results with checks and warnings
 
     Validation Checks:
-        1. Client ID Filter - Ensures WHERE client_id = {expected_client_id} is present
-        2. Single Client - Ensures no other client IDs are referenced
+        1. Client ID Filter - Ensures proper filter based on isolation method
+        2. Single Client - Ensures no other client/corporation IDs are referenced
         3. Read-Only - Ensures no destructive SQL operations (DROP, DELETE, UPDATE, etc.)
-        
-    Dataset-Aware Features:
-        - Validates based on dataset's fact tables (if config provided)
-        - Checks client isolation on correct tables
-        - Provides dataset-specific error messages
+
+    Method-Driven Features:
+        - Validates based on config's isolation method ("row-level" or "brand-hierarchy")
+        - Uses config's filter_field (client_id, corp_id, etc.)
+        - Adapts validation patterns to dataset requirements
+        - Provides method-specific error messages
     """
     start_time = time.time()
 
@@ -73,131 +74,122 @@ def validate_sql_for_client_isolation(sql_query, expected_client_id, dataset_con
     sql_normalized = ' '.join(sql_query.split())  # Collapse whitespace
 
     # ==========================================
-    # Check 1: Client/Corporation ID Filter (MANDATORY - Dataset-Aware)
+    # Check 1: Client/Corporation ID Filter (MANDATORY - Method-Driven)
     # ==========================================
     # ALL datasets MUST filter by client/corporation ID
-    # Different datasets use different isolation methods:
-    #   - sales/market_size: row-level client_id in fact tables
-    #   - em_market: corp_id through brand hierarchy (Dim_Brand)
-    
-    # Determine which field to check based on dataset config
+    # Validation method is determined by config, not hardcoded table names
+
+    # Determine isolation method from config
     filter_field = "client_id"  # Default
     filter_method = "row-level"  # Default
-    
+
     if dataset_config and 'client_isolation' in dataset_config:
         client_iso = dataset_config['client_isolation']
-        
-        # Check if dataset uses alternative field (like corp_id)
-        if 'client_table' in client_iso:
-            client_table = client_iso.get('client_table', 'clients')
-            filter_field = client_iso.get('client_id_field', 'client_id')
-            
-            # em_market uses corp_id through brand hierarchy
-            if client_table == 'Dim_Corporation':
-                filter_method = "brand-hierarchy"
+        filter_method = client_iso.get('method', 'row-level')
+        filter_field = client_iso.get('filter_field', 'client_id')
     
-    # Look for the appropriate filter pattern
+    # Look for the appropriate filter pattern based on method
     if filter_method == "brand-hierarchy":
-        # For em_market: check for corp_id filter through Dim_Brand join
-        # Pattern: JOIN Dim_Brand ... WHERE corp_id = X OR b.corp_id = X
-        corp_id_patterns = [
-            rf'\bWHERE\s+.*?\bcorp_id\s*=\s*{expected_client_id}\b',
-            rf'\bAND\s+.*?\bcorp_id\s*=\s*{expected_client_id}\b',
-            rf'\bcorp_id\s*=\s*{expected_client_id}\b',  # Anywhere in query
+        # Brand-hierarchy method: check for filter_field anywhere in query
+        # More flexible validation - allows complex join patterns
+        filter_patterns = [
+            rf'\bWHERE\s+.*?\b{filter_field}\s*=\s*{expected_client_id}\b',
+            rf'\bAND\s+.*?\b{filter_field}\s*=\s*{expected_client_id}\b',
+            rf'\b{filter_field}\s*=\s*{expected_client_id}\b',  # Anywhere in query
         ]
-        
+
         filter_found = False
-        for pattern in corp_id_patterns:
+        for pattern in filter_patterns:
             if re.search(pattern, sql_normalized, re.IGNORECASE):
                 filter_found = True
                 break
-        
+
         if not filter_found:
             passed = False
             checks.append({
                 "name": "Client ID Filter",
                 "status": "FAIL",
-                "message": f"Missing corp_id = {expected_client_id} filter in brand hierarchy"
+                "message": f"Missing {filter_field} = {expected_client_id} filter (method: {filter_method})"
             })
-            logger.warning(f"Validation FAILED: Missing corp_id filter for corporation {expected_client_id}")
+            logger.warning(f"Validation FAILED: Missing {filter_field} filter for client {expected_client_id}")
         else:
             checks.append({
                 "name": "Client ID Filter",
                 "status": "PASS",
-                "message": f"Query correctly filters by corp_id = {expected_client_id}"
+                "message": f"Found {filter_field} = {expected_client_id} filter"
             })
-            logger.debug(f"Corporation filter check: PASS")
+            logger.debug(f"{filter_field} filter check: PASS")
     
     else:
-        # Default: row-level client_id filtering
-        # Pattern to find WHERE clause with client_id filter
-        # Matches: WHERE client_id = 5 OR WHERE s.client_id = 5 OR WHERE ... AND client_id = 5
-        client_id_patterns = [
-            rf'\bWHERE\s+.*?\bclient_id\s*=\s*{expected_client_id}\b',
-            rf'\bAND\s+.*?\bclient_id\s*=\s*{expected_client_id}\b',
-            rf'\bclient_id\s*=\s*{expected_client_id}\b.*?\bWHERE\b',  # In subqueries
+        # Default: row-level filtering (generic filter_field)
+        # Pattern to find WHERE clause with filter_field filter
+        # Matches: WHERE filter_field = X OR WHERE t.filter_field = X OR WHERE ... AND filter_field = X
+        filter_patterns = [
+            rf'\bWHERE\s+.*?\b{filter_field}\s*=\s*{expected_client_id}\b',
+            rf'\bAND\s+.*?\b{filter_field}\s*=\s*{expected_client_id}\b',
+            rf'\b{filter_field}\s*=\s*{expected_client_id}\b.*?\bWHERE\b',  # In subqueries
         ]
 
-        client_id_found = False
-        for pattern in client_id_patterns:
+        filter_found = False
+        for pattern in filter_patterns:
             if re.search(pattern, sql_normalized, re.IGNORECASE):
-                client_id_found = True
+                filter_found = True
                 break
 
-        if not client_id_found:
+        if not filter_found:
             passed = False
             checks.append({
                 "name": "Client ID Filter",
                 "status": "FAIL",
-                "message": f"Missing WHERE client_id = {expected_client_id} filter"
+                "message": f"Missing WHERE {filter_field} = {expected_client_id} filter"
             })
-            logger.warning(f"Validation FAILED: Missing client_id filter for client {expected_client_id}")
+            logger.warning(f"Validation FAILED: Missing {filter_field} filter for client {expected_client_id}")
         else:
             checks.append({
                 "name": "Client ID Filter",
                 "status": "PASS",
-                "message": f"Query correctly filters by client_id = {expected_client_id}"
+                "message": f"Query correctly filters by {filter_field} = {expected_client_id}"
             })
-            logger.debug(f"Client ID filter check: PASS")
+            logger.debug(f"{filter_field} filter check: PASS")
 
     # ==========================================
     # Check 2: Single Client
     # ==========================================
-    # Ensure no references to other client IDs
-    # This prevents queries like: WHERE client_id IN (1,2,3) or client_id = 5 OR client_id = 6
+    # Ensure no references to other client/corporation IDs
+    # This prevents queries like: WHERE filter_field IN (1,2,3) or filter_field = 5 OR filter_field = 6
 
-    # Find all client_id = N patterns
-    all_client_id_matches = re.findall(r'\bclient_id\s*=\s*(\d+)', sql_normalized, re.IGNORECASE)
-    all_client_ids = [int(match) for match in all_client_id_matches]
+    # Find all filter_field = N patterns
+    all_filter_matches = re.findall(rf'\b{filter_field}\s*=\s*(\d+)', sql_normalized, re.IGNORECASE)
+    all_filter_ids = [int(match) for match in all_filter_matches]
 
-    # Check for IN clauses: client_id IN (1,2,3)
-    in_clause_matches = re.findall(r'\bclient_id\s+IN\s*\([^)]+\)', sql_normalized, re.IGNORECASE)
+    # Check for IN clauses: filter_field IN (1,2,3)
+    in_clause_matches = re.findall(rf'\b{filter_field}\s+IN\s*\([^)]+\)', sql_normalized, re.IGNORECASE)
     if in_clause_matches:
         passed = False
         checks.append({
             "name": "Single Client",
             "status": "FAIL",
-            "message": "Query uses IN clause with multiple client IDs - data isolation violated"
+            "message": f"Query uses IN clause with multiple {filter_field}s - data isolation violated"
         })
-        logger.warning(f"Validation FAILED: IN clause detected with multiple clients")
-    elif len(set(all_client_ids)) > 1:
-        # Multiple different client IDs found
+        logger.warning(f"Validation FAILED: IN clause detected with multiple {filter_field}s")
+    elif len(set(all_filter_ids)) > 1:
+        # Multiple different filter IDs found
         passed = False
         checks.append({
             "name": "Single Client",
             "status": "FAIL",
-            "message": f"Query references multiple client IDs: {set(all_client_ids)}"
+            "message": f"Query references multiple {filter_field}s: {set(all_filter_ids)}"
         })
-        logger.warning(f"Validation FAILED: Multiple client IDs found: {set(all_client_ids)}")
-    elif all_client_ids and all_client_ids[0] != expected_client_id:
-        # Found a client_id but it doesn't match expected
+        logger.warning(f"Validation FAILED: Multiple {filter_field}s found: {set(all_filter_ids)}")
+    elif all_filter_ids and all_filter_ids[0] != expected_client_id:
+        # Found a filter_field but it doesn't match expected
         passed = False
         checks.append({
             "name": "Single Client",
             "status": "FAIL",
-            "message": f"Query filters by client_id = {all_client_ids[0]} but expected {expected_client_id}"
+            "message": f"Query filters by {filter_field} = {all_filter_ids[0]} but expected {expected_client_id}"
         })
-        logger.warning(f"Validation FAILED: Wrong client ID {all_client_ids[0]} vs expected {expected_client_id}")
+        logger.warning(f"Validation FAILED: Wrong {filter_field} {all_filter_ids[0]} vs expected {expected_client_id}")
     else:
         checks.append({
             "name": "Single Client",
@@ -247,7 +239,7 @@ def validate_sql_for_client_isolation(sql_query, expected_client_id, dataset_con
     if where_count > 1:
         warnings.append({
             "type": "MULTIPLE_WHERE",
-            "message": f"Multiple WHERE clauses detected ({where_count}) - verify JOIN logic includes client_id filtering"
+            "message": f"Multiple WHERE clauses detected ({where_count}) - verify JOIN logic includes {filter_field} filtering"
         })
         logger.info(f"Warning: Multiple WHERE clauses ({where_count})")
 
@@ -255,7 +247,7 @@ def validate_sql_for_client_isolation(sql_query, expected_client_id, dataset_con
     if "SELECT" in sql_upper and sql_upper.count("SELECT") > 1:
         warnings.append({
             "type": "SUBQUERY",
-            "message": "Subquery detected - ensure all subqueries filter by client_id"
+            "message": f"Subquery detected - ensure all subqueries filter by {filter_field}"
         })
         logger.info(f"Warning: Subquery detected")
 
@@ -263,7 +255,7 @@ def validate_sql_for_client_isolation(sql_query, expected_client_id, dataset_con
     if "UNION" in sql_upper:
         warnings.append({
             "type": "UNION",
-            "message": "UNION detected - verify both queries filter by client_id"
+            "message": f"UNION detected - verify both queries filter by {filter_field}"
         })
         logger.info(f"Warning: UNION detected")
 

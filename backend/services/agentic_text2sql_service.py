@@ -86,16 +86,21 @@ class AgenticText2SQLService:
     reflection, clarification) through a LangGraph state machine.
     """
     
-    def __init__(self):
-        """Initialize service with existing dependencies and session storage."""
-        self.claude_service = ClaudeService()
+    def __init__(self, dataset_id=None):
+        """Initialize service with dataset awareness and session storage.
+
+        Args:
+            dataset_id (str, optional): Dataset identifier for metadata loading and validation
+        """
+        self.dataset_id = dataset_id
+        self.claude_service = ClaudeService(dataset_id=dataset_id)
         self.db_engine = get_engine()
         self.tools = self._initialize_tools()
         self.workflow = self._build_workflow()
-        
+
         # Session storage (Architecture Section 7.1 - in-memory for POC)
         self.chat_sessions = {}
-        logger.info("AgenticText2SQLService initialized with session storage")
+        logger.info(f"AgenticText2SQLService initialized for dataset: {dataset_id or 'default'}")
     
     def _get_chat_history(self, session_id: str) -> List[Dict]:
         """
@@ -1198,13 +1203,17 @@ Write as if explaining to a non-technical business user."""
             if skip_clarification:
                 logger.info("Clarified query detected - skipping ambiguity detection")
 
+            # Fetch client name from database
+            client_name = self._fetch_client_name(client_id, dataset_id)
+            logger.error(f"DEBUG: Fetched client_name='{client_name}' for client_id={client_id}, dataset={dataset_id}")
+            
             # Initialize state (Architecture Section 4.1 + Story 7.1 + Dataset Support)
             initial_state: AgentState = {
                 "user_query": user_query,
                 "session_id": session_id,
                 "resolved_query": resolved_query,
                 "client_id": client_id,
-                "client_name": None,  # Could be fetched from DB if needed
+                "client_name": client_name,
                 "dataset_id": dataset_id,  # Dataset support
                 "chat_history": [],
                 "iteration": 0,
@@ -1329,7 +1338,187 @@ Write as if explaining to a non-technical business user."""
                 "interpretation": resolution_info.get("interpretation")
             }
         
+        # Add key details for Passport AI-style insights
+        response["key_details"] = self._generate_key_details(state, execution_result)
+        
         return response
+    
+    def _extract_filters_from_sql(self, state: AgentState) -> List[str]:
+        """
+        Extract human-readable filters from SQL query.
+        
+        Args:
+            state: Current agent state with SQL query
+            
+        Returns:
+            List of filter descriptions
+        """
+        sql_query = state.get("sql_query", "")
+        filters = []
+        
+        if not sql_query:
+            return filters
+        
+        # Add client/corporation filter (always present)
+        client_name = state.get("client_name", "Unknown")
+        dataset_id = state.get("dataset_id", "")
+        
+        if dataset_id == "em_market":
+            filters.append(f"Corporation: {client_name}")
+        else:
+            filters.append(f"Client: {client_name}")
+        
+        # Extract year filters
+        import re
+        year_pattern = r"(?:fiscal_year|year)\s*=\s*(\d{4})"
+        year_matches = re.findall(year_pattern, sql_query, re.IGNORECASE)
+        if year_matches:
+            filters.append(f"Year: {', '.join(year_matches)}")
+        
+        # Extract product category filters
+        category_pattern = r"(?:product_category|category_name)\s*=\s*['\"]([^'\"]+)['\"]"
+        category_matches = re.findall(category_pattern, sql_query, re.IGNORECASE)
+        if category_matches:
+            filters.append(f"Product Category: {', '.join(category_matches)}")
+        
+        # Extract country/geography filters
+        country_pattern = r"(?:country_name|country)\s*=\s*['\"]([^'\"]+)['\"]"
+        country_matches = re.findall(country_pattern, sql_query, re.IGNORECASE)
+        if country_matches:
+            filters.append(f"Country: {', '.join(country_matches)}")
+        
+        # Extract brand filters
+        brand_pattern = r"(?:brand_name|brand)\s*=\s*['\"]([^'\"]+)['\"]"
+        brand_matches = re.findall(brand_pattern, sql_query, re.IGNORECASE)
+        if brand_matches:
+            filters.append(f"Brand: {', '.join(brand_matches)}")
+        
+        # Extract measure type from aggregations
+        if "SUM(" in sql_query.upper():
+            sum_pattern = r"SUM\(([^)]+)\)"
+            sum_matches = re.findall(sum_pattern, sql_query, re.IGNORECASE)
+            if sum_matches:
+                # Clean up the field name
+                measure = sum_matches[0].split('.')[-1].replace('_', ' ').title()
+                filters.append(f"Measure: {measure}")
+        
+        return filters if filters else ["No specific filters applied"]
+    
+    def _format_result_summary(self, execution_result: Dict) -> str:
+        """
+        Format a human-readable summary of the query result.
+        
+        Args:
+            execution_result: Query execution result with data
+            
+        Returns:
+            Human-readable result summary
+        """
+        if not execution_result or not execution_result.get("results"):
+            return "No results found"
+        
+        results = execution_result["results"]
+        row_count = len(results)
+        
+        if row_count == 0:
+            return "No results found"
+        elif row_count == 1:
+            # Single result - try to extract the main value
+            first_row = results[0]
+            # Look for common value columns
+            for key in first_row.keys():
+                key_lower = key.lower()
+                if any(term in key_lower for term in ['total', 'sum', 'value', 'count', 'sales', 'market', 'revenue']):
+                    value = first_row[key]
+                    if isinstance(value, (int, float)):
+                        formatted_value = f"{value:,.2f}" if isinstance(value, float) else f"{value:,}"
+                        return f"{formatted_value} ({key.replace('_', ' ').title()})"
+            return f"Single result with {len(first_row)} columns"
+        else:
+            return f"{row_count} rows returned"
+    
+    def _fetch_client_name(self, client_id: int, dataset_id: str) -> str:
+        """
+        Fetch client/corporation name from the database.
+        
+        Args:
+            client_id: Client or corporation ID
+            dataset_id: Dataset identifier
+            
+        Returns:
+            Client/corporation name or "Unknown"
+        """
+        logger.error(f"DEBUG: _fetch_client_name called with client_id={client_id}, dataset={dataset_id}")
+        try:
+            import sqlite3
+            from config import Config
+            
+            dataset_config = Config.get_dataset(dataset_id)
+            db_path = dataset_config['db_path']
+            logger.error(f"DEBUG: db_path={db_path}")
+            
+            client_config = Config.get_client_config(dataset_id)
+            logger.error(f"DEBUG: client_config={client_config}")
+            
+            # Get client table and field names
+            client_table = client_config.get('client_table', 'clients')
+            client_id_field = client_config.get('client_id_field', 'client_id')
+            client_name_field = client_config.get('client_name_field', 'client_name')
+            
+            logger.error(f"DEBUG: Will query {client_table}.{client_name_field} WHERE {client_id_field}={client_id}")
+            
+            # Connect and query using sqlite3 directly
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row  # Enable column access by name
+            cursor = conn.cursor()
+            
+            # Build safe query (client_id is validated as int)
+            query = f"SELECT {client_name_field} FROM {client_table} WHERE {client_id_field} = ?"
+            logger.error(f"DEBUG: Executing query: {query} with params ({int(client_id)},)")
+            cursor.execute(query, (int(client_id),))
+            
+            result = cursor.fetchone()
+            logger.error(f"DEBUG: Query result: {dict(result) if result else None}")
+            conn.close()
+            
+            if result:
+                name = result[client_name_field]
+                logger.error(f"DEBUG: Successfully fetched client name: '{name}'")
+                return name
+            
+            logger.error(f"DEBUG: No result found for client_id={client_id}")
+            return "Unknown"
+            
+        except Exception as e:
+            logger.error(f"DEBUG: Exception in _fetch_client_name: {e}", exc_info=True)
+            return "Unknown"
+    
+    def _generate_key_details(self, state: AgentState, execution_result: Dict) -> Dict:
+        """
+        Generate key details object for Passport AI-style display.
+        
+        Args:
+            state: Current agent state
+            execution_result: Query execution result
+            
+        Returns:
+            Key details dictionary
+        """
+        from config import Config
+        
+        dataset_id = state.get("dataset_id", "unknown")
+        dataset_config = Config.get_dataset(dataset_id)
+        
+        key_details = {
+            "dataset": dataset_config.get("name", dataset_id),
+            "client": state.get("client_name", "Unknown"),
+            "client_id": state.get("client_id"),
+            "filters_applied": self._extract_filters_from_sql(state),
+            "result": self._format_result_summary(execution_result),
+            "row_count": len(execution_result.get("results", [])) if execution_result else 0
+        }
+        
+        return key_details
     
     def _initialize_tools(self) -> Dict[str, Tool]:
         """
@@ -1443,7 +1632,7 @@ Write as if explaining to a non-technical business user."""
                 pass
         
         metadata.append("-- IMPORTANT: For 'last N years' queries, use fact table's MAX(year) - N, not current date!")
-        metadata.append("--   Example: year >= (SELECT MAX(year) - 1 FROM fact_market_size WHERE is_forecast = 0)")
+        metadata.append("--   Example: year >= (SELECT MAX(year) - 1 FROM <fact_table> WHERE is_forecast = 0)")
         
         conn.close()
         

@@ -6,8 +6,8 @@
 
 import axios from 'axios';
 
-// Base URL for API - matches backend Flask server
-const API_BASE_URL = 'http://localhost:5000';
+// Base URL for API - uses environment variable with fallback
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
 
 // Create axios instance with default config
 const apiClient = axios.create({

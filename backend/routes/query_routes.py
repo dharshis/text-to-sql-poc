@@ -15,16 +15,18 @@ from services.claude_service import ClaudeService
 from services.query_executor import QueryExecutor
 from services.sql_validator import validate_sql_for_client_isolation, get_validation_summary
 from services.agentic_text2sql_service import AgenticText2SQLService
+from config import Config
 
 logger = logging.getLogger(__name__)
 
 # Create Blueprint
 query_bp = Blueprint('query', __name__)
 
-# Initialize services
-claude_service = ClaudeService()
+# Initialize services with active dataset
+active_dataset = Config.get_active_dataset()
+claude_service = ClaudeService(dataset_id=active_dataset)
 query_executor = QueryExecutor()
-agentic_service = AgenticText2SQLService()
+agentic_service = AgenticText2SQLService(dataset_id=active_dataset)
 
 
 def _update_active_dataset_in_config(dataset_id: str) -> bool:
@@ -137,7 +139,8 @@ def execute_query():
 
         # Step 2: Validate SQL for client isolation and security
         validation_start = time.time()
-        validation_result = validate_sql_for_client_isolation(sql_query, client_id)
+        dataset_config = Config.get_dataset(active_dataset)
+        validation_result = validate_sql_for_client_isolation(sql_query, client_id, dataset_config)
         validation_time = time.time() - validation_start
 
         # If validation fails, return 400 error with validation details

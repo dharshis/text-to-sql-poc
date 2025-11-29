@@ -21,7 +21,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ReactMarkdown from 'react-markdown';
 
-const InsightCard = ({ explanation }) => {
+const InsightCard = ({ explanation, keyDetails }) => {
   const [expanded, setExpanded] = useState(true);
 
   if (!explanation) {
@@ -145,6 +145,31 @@ const InsightCard = ({ explanation }) => {
             }}
           >
             <ReactMarkdown>{explanation}</ReactMarkdown>
+            
+            {/* Key Details Section */}
+            {keyDetails && (
+              <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid rgba(255,255,255,0.3)' }}>
+                <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1.5 }}>
+                  Key details:
+                </Typography>
+                <Box sx={{ pl: 2, fontSize: '14px' }}>
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>
+                    - <strong>Dataset used:</strong> {keyDetails.dataset}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>
+                    - <strong>Filters applied:</strong>
+                  </Typography>
+                  {keyDetails.filters_applied && keyDetails.filters_applied.map((filter, idx) => (
+                    <Typography key={idx} variant="body2" sx={{ pl: 2, mb: 0.5 }}>
+                      - {filter}
+                    </Typography>
+                  ))}
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>
+                    - <strong>Result:</strong> {keyDetails.result}
+                  </Typography>
+                </Box>
+              </Box>
+            )}
           </Box>
         </Collapse>
       </CardContent>

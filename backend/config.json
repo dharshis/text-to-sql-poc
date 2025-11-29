@@ -6,7 +6,7 @@
   },
   "flask": {
     "debug": true,
-    "port": 5001,
+    "port": 5000,
     "host": "0.0.0.0",
     "cors_origins": ["http://localhost:5173"]
   },
@@ -26,31 +26,42 @@
       "id": "sales",
       "name": "Sales Transactions",
       "db_path": "data/text_to_sql_poc.db",
+      "description": "Retail sales demonstration data",
       "client_isolation": {
         "enabled": true,
-        "field": "client_id",
-        "tables_requiring_filter": ["sales"]
+        "method": "row-level",
+        "filter_field": "client_id",
+        "description": "Row-level client_id filtering on fact tables"
       }
     },
     "market_size": {
       "id": "market_size",
       "name": "Market Size Analytics",
       "db_path": "data/market_size.db",
+      "description": "Market size tracking and forecast data",
       "client_isolation": {
         "enabled": true,
-        "field": "client_id",
-        "tables_requiring_filter": ["fact_market_size", "fact_forecasts"]
+        "method": "row-level",
+        "filter_field": "client_id",
+        "description": "Row-level client_id filtering on fact tables"
       }
     },
     "em_market": {
       "id": "em_market",
       "name": "EM Market - FMCG/CPG Analytics",
       "db_path": "data/em_market/em_market.db",
+      "description": "Global market research data for consumer goods",
       "client_isolation": {
-        "enabled": false,
-        "client_table": "Dim_Corporation",
-        "client_id_field": "corp_id",
-        "client_name_field": "corp_name"
+        "enabled": true,
+        "method": "brand-hierarchy",
+        "filter_field": "corp_id",
+        "filter_table": "Dim_Brand",
+        "description": "Corporation-based isolation through brand hierarchy (Dim_Corporation → Dim_Brand)"
+      },
+      "clients": {
+        "table_name": "Dim_Corporation",
+        "id_field": "corp_id",
+        "name_field": "corp_name"
       }
     }
   }
