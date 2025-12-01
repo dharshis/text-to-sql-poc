@@ -1571,9 +1571,9 @@ Write as if explaining to a non-technical business user."""
             
             response = self.claude_service.client.messages.create(
                 model=self.claude_service.model,
-                max_tokens=300,
+                max_tokens=30000,
                 temperature=0.7,
-                system="You are a data insights analyst. Transform query results into clear, actionable insights.",
+                system="You are a data insights analyst. Transform query results into clear, actionable insights. List out the insights as points. Highlight the numeric values in bold. Be detailed in your analysis. Call out the key insights at the top. Be critical about your analysis. Justify your critical analysis with facts and data. Use plain English for business stakeholders.",
                 messages=[{"role": "user", "content": explanation_prompt}]
             )
             
