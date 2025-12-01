@@ -18,7 +18,7 @@ import { Send as SendIcon, Person as PersonIcon, SmartToy as BotIcon } from '@mu
 
 const INITIAL_MESSAGE = {
   role: 'assistant',
-  content: 'Hi! I\'m your Smart Insight Generator. I can help you analyze:\n\n📊 Brand Portfolio Performance\n💰 Price Tier Strategies (Premium vs Mass)\n📈 Sales Trends & Growth\n🌍 Geographic Analysis\n📦 Distribution Effectiveness\n\nTry asking:\n• "Show me brand portfolio performance by revenue"\n• "Compare premium vs mass market segments"\n• "What are quarterly sales trends for 2023?"',
+  content: 'Hi! I\'m your Smart Insight Generator. I can help you analyze:\n\n📊 Brand Portfolio Performance\n💰 Price Tier Strategies (Premium vs Mass)\n📈 Sales Trends & Growth\n🌍 Geographic Analysis\n📦 Distribution Effectiveness',
   timestamp: new Date(),
 };
 
