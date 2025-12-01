@@ -1720,7 +1720,7 @@ Write as if explaining to a non-technical business user."""
 
             # Fetch client name from database
             client_name = self._fetch_client_name(client_id, dataset_id)
-            logger.error(f"DEBUG: Fetched client_name='{client_name}' for client_id={client_id}, dataset={dataset_id}")
+            logger.info(f"Fetched client_name='{client_name}' for client_id={client_id}, dataset={dataset_id}")
             
             # Initialize state (Architecture Section 4.1 + Query Expansion Architecture)
             initial_state: AgentState = {
@@ -1967,57 +1967,54 @@ Write as if explaining to a non-technical business user."""
     def _fetch_client_name(self, client_id: int, dataset_id: str) -> str:
         """
         Fetch client/corporation name from the database.
-        
+
         Args:
             client_id: Client or corporation ID
             dataset_id: Dataset identifier
-            
+
         Returns:
             Client/corporation name or "Unknown"
         """
-        logger.error(f"DEBUG: _fetch_client_name called with client_id={client_id}, dataset={dataset_id}")
+        logger.debug(f"Fetching client name for client_id={client_id}, dataset={dataset_id}")
         try:
             import sqlite3
             from config import Config
-            
+
             dataset_config = Config.get_dataset(dataset_id)
             db_path = dataset_config['db_path']
-            logger.error(f"DEBUG: db_path={db_path}")
-            
+
             client_config = Config.get_client_config(dataset_id)
-            logger.error(f"DEBUG: client_config={client_config}")
-            
+
             # Get client table and field names
-            client_table = client_config.get('client_table', 'clients')
-            client_id_field = client_config.get('client_id_field', 'client_id')
-            client_name_field = client_config.get('client_name_field', 'client_name')
-            
-            logger.error(f"DEBUG: Will query {client_table}.{client_name_field} WHERE {client_id_field}={client_id}")
-            
+            client_table = client_config.get('client_table', 'dim_corporation')
+            client_id_field = client_config.get('client_id_field', 'corp_id')
+            client_name_field = client_config.get('client_name_field', 'corp_name')
+
+            logger.debug(f"Querying {client_table}.{client_name_field} WHERE {client_id_field}={client_id}")
+
             # Connect and query using sqlite3 directly
             conn = sqlite3.connect(db_path)
             conn.row_factory = sqlite3.Row  # Enable column access by name
             cursor = conn.cursor()
-            
+
             # Build safe query (client_id is validated as int)
             query = f"SELECT {client_name_field} FROM {client_table} WHERE {client_id_field} = ?"
             logger.error(f"DEBUG: Executing query: {query} with params ({int(client_id)},)")
             cursor.execute(query, (int(client_id),))
-            
+
             result = cursor.fetchone()
-            logger.error(f"DEBUG: Query result: {dict(result) if result else None}")
             conn.close()
             
             if result:
                 name = result[client_name_field]
-                logger.error(f"DEBUG: Successfully fetched client name: '{name}'")
+                logger.info(f"Successfully fetched client name: '{name}' for client_id={client_id}")
                 return name
-            
-            logger.error(f"DEBUG: No result found for client_id={client_id}")
+
+            logger.warning(f"No result found for client_id={client_id} in {client_table}")
             return "Unknown"
-            
+
         except Exception as e:
-            logger.error(f"DEBUG: Exception in _fetch_client_name: {e}", exc_info=True)
+            logger.error(f"Failed to fetch client name for client_id={client_id}: {e}", exc_info=True)
             return "Unknown"
     
     def _generate_key_details(self, state: AgentState, execution_result: Dict) -> Dict:
