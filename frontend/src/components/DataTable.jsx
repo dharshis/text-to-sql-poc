@@ -22,7 +22,7 @@ import {
 const DataTable = ({ data, columns }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
-  const [orderBy, setOrderBy] = useState(columns[0] || '');
+  const [orderBy, setOrderBy] = useState(null); // No initial sorting - preserve SQL query order
   const [order, setOrder] = useState('asc');
 
   if (!data || data.length === 0 || !columns || columns.length === 0) {
@@ -50,27 +50,30 @@ const DataTable = ({ data, columns }) => {
     setOrderBy(property);
   };
 
-  // Sort data
-  const sortedData = [...data].sort((a, b) => {
-    const aValue = a[orderBy];
-    const bValue = b[orderBy];
+  // Sort data - only if user has clicked a column header
+  // Otherwise, preserve the original order from the SQL query
+  const sortedData = orderBy
+    ? [...data].sort((a, b) => {
+        const aValue = a[orderBy];
+        const bValue = b[orderBy];
 
-    // Handle null/undefined
-    if (aValue == null) return 1;
-    if (bValue == null) return -1;
+        // Handle null/undefined
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
 
-    // Numeric comparison
-    if (typeof aValue === 'number' && typeof bValue === 'number') {
-      return order === 'asc' ? aValue - bValue : bValue - aValue;
-    }
+        // Numeric comparison
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return order === 'asc' ? aValue - bValue : bValue - aValue;
+        }
 
-    // String comparison
-    const aString = String(aValue).toLowerCase();
-    const bString = String(bValue).toLowerCase();
-    if (aString < bString) return order === 'asc' ? -1 : 1;
-    if (aString > bString) return order === 'asc' ? 1 : -1;
-    return 0;
-  });
+        // String comparison
+        const aString = String(aValue).toLowerCase();
+        const bString = String(bValue).toLowerCase();
+        if (aString < bString) return order === 'asc' ? -1 : 1;
+        if (aString > bString) return order === 'asc' ? 1 : -1;
+        return 0;
+      })
+    : data; // Return original data order when no sorting is active
 
   // Paginate data
   const paginatedData = sortedData.slice(

@@ -22,9 +22,10 @@ const INITIAL_MESSAGE = {
   timestamp: new Date(),
 };
 
-const SearchBar = ({ clientId, onSubmit, loading, disabled, resetTrigger }) => {
+const SearchBar = ({ clientId, onSubmit, loading, disabled, resetTrigger, clarificationQuestions, onClarificationResponse }) => {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
+  const [awaitingClarification, setAwaitingClarification] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -40,9 +41,59 @@ const SearchBar = ({ clientId, onSubmit, loading, disabled, resetTrigger }) => {
     if (resetTrigger !== undefined && resetTrigger !== null) {
       setMessages([{ ...INITIAL_MESSAGE, timestamp: new Date() }]);
       setQuery('');
+      setAwaitingClarification(false);
       console.log('Chat UI reset to initial state');
     }
   }, [resetTrigger]);
+
+  // Add clarification questions as chat messages when they arrive
+  useEffect(() => {
+    if (clarificationQuestions && clarificationQuestions.length > 0 && !awaitingClarification) {
+      // Remove the "Analyzing your query..." message if it exists
+      setMessages(prev => {
+        const filtered = prev.filter(msg => !(msg.isThinking && msg.content === 'Analyzing your query...'));
+        
+        const clarificationMessage = {
+          role: 'assistant',
+          content: 'I need a bit more information to help you better:\n\n' + 
+                   clarificationQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n') +
+                   '\n\nPlease provide additional details in your response.',
+          timestamp: new Date(),
+          isClarification: true,
+        };
+        
+        return [...filtered, clarificationMessage];
+      });
+      setAwaitingClarification(true);
+    }
+  }, [clarificationQuestions, awaitingClarification]);
+
+  // Update "Analyzing your query..." message when loading completes
+  useEffect(() => {
+    if (!loading) {
+      // Find the last "thinking" message and update it
+      setMessages(prev => {
+        const updated = [...prev];
+        // Find the last message with isThinking flag
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].isThinking && updated[i].content === 'Analyzing your query...') {
+            updated[i] = {
+              ...updated[i],
+              content: 'Done fetching results',
+              isThinking: false,
+            };
+            break;
+          }
+        }
+        return updated;
+      });
+      
+      // Reset clarification state when loading completes (unless we're awaiting clarification)
+      if (!awaitingClarification) {
+        setAwaitingClarification(false);
+      }
+    }
+  }, [loading, awaitingClarification]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -55,7 +106,15 @@ const SearchBar = ({ clientId, onSubmit, loading, disabled, resetTrigger }) => {
       };
       setMessages(prev => [...prev, userMessage]);
 
-      // Submit query
+      // If we're awaiting clarification, handle it as a clarification response
+      if (awaitingClarification && onClarificationResponse) {
+        onClarificationResponse(query.trim());
+        setAwaitingClarification(false);
+        setQuery('');
+        return;
+      }
+
+      // Otherwise, submit as normal query
       onSubmit(query, clientId);
 
       // Clear input
@@ -171,7 +230,7 @@ const SearchBar = ({ clientId, onSubmit, loading, disabled, resetTrigger }) => {
             fullWidth
             multiline
             maxRows={3}
-            placeholder="Type your message here..."
+            placeholder={awaitingClarification ? "Please provide additional details..." : "Type your message here..."}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}

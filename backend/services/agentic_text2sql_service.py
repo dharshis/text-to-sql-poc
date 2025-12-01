@@ -453,7 +453,7 @@ Respond in JSON format:
                 "entities_inherited": {}
             }
     
-    def _expand_query_with_context(self, user_query: str, chat_history: List[Dict]) -> str:
+    def _expand_query_with_context(self, user_query: str, chat_history: List[Dict], is_clarified: bool = False) -> str:
         """
         Expand fragment/follow-up queries into complete queries using conversation context.
         Works at natural language level - no SQL parsing needed.
@@ -463,6 +463,7 @@ Respond in JSON format:
         Args:
             user_query: Current user input (may be fragment like "by region" or complete query)
             chat_history: Previous queries in conversation (for context)
+            is_clarified: If True, this is a clarified query with additional context
             
         Returns:
             Expanded, standalone natural language query
@@ -475,21 +476,104 @@ Respond in JSON format:
             Previous: "Show sales in 2023", "by region"
             Input: "for Africa"  
             Output: "Show sales in 2023 by region for Africa"
+            
+            Clarified: "Show sales. Additional information: for Q4 2023"
+            Output: "Show sales for Q4 2023" (incorporates clarification naturally)
         """
-        logger.info(f"Expanding query: '{user_query}'")
+        logger.info(f"Expanding query: '{user_query}' (clarified: {is_clarified})")
         start_time = datetime.now()
+        
+        # For clarified queries, try to incorporate the clarification naturally
+        combined_query = None
+        if is_clarified:
+            # Extract original query and clarification
+            if "Additional information:" in user_query:
+                parts = user_query.split("Additional information:", 1)
+                original = parts[0].strip().rstrip('.')
+                clarification = parts[1].strip()
+                
+                # Check if clarification is a complete query (has action verb)
+                clarification_lower = clarification.lower()
+                has_action_in_clarification = any(word in clarification_lower for word in [
+                    "show", "list", "display", "get", "find", "compare", "analyze", "need", "want", "see"
+                ])
+                
+                # If clarification is a complete query, use it as the main query
+                if has_action_in_clarification:
+                    logger.info(f"Clarification is a complete query - using it directly: '{clarification}'")
+                    combined_query = clarification
+                else:
+                    # Clarification is additional context - combine with original
+                    combined_query = f"{original} {clarification}".strip()
+                    logger.info(f"Clarified query combined: '{combined_query}'")
+                
+                # Still run through expansion to incorporate history if needed
+                if chat_history:
+                    # Use the combined query for expansion
+                    user_query = combined_query
+                else:
+                    return combined_query
+            elif "Additional context:" in user_query:
+                # Handle old format for backward compatibility
+                parts = user_query.split("Additional context:", 1)
+                original = parts[0].strip().rstrip('.')
+                clarification = parts[1].strip()
+                
+                # Same logic: check if clarification is complete
+                clarification_lower = clarification.lower()
+                has_action_in_clarification = any(word in clarification_lower for word in [
+                    "show", "list", "display", "get", "find", "compare", "analyze", "need", "want", "see"
+                ])
+                
+                if has_action_in_clarification:
+                    logger.info(f"Clarification is a complete query (old format) - using it directly: '{clarification}'")
+                    combined_query = clarification
+                else:
+                    combined_query = f"{original} {clarification}".strip()
+                    logger.info(f"Clarified query combined (old format): '{combined_query}'")
+                
+                if chat_history:
+                    user_query = combined_query
+                else:
+                    return combined_query
         
         # No history = use query as-is
         if not chat_history:
             logger.info("No history for expansion, using query as-is")
-            return user_query
+            return combined_query if (is_clarified and combined_query) else user_query
         
         # Get last 3-5 user queries (just NL, not SQL) for context
         recent_history = chat_history[-5:] if len(chat_history) > 5 else chat_history
         previous_queries = [entry.get('user_query', '') for entry in recent_history]
         
         # Build expansion prompt
-        expansion_prompt = f"""You are helping expand fragment queries in a data analysis conversation.
+        if is_clarified:
+            # Special handling for clarified queries - incorporate clarification naturally
+            expansion_prompt = f"""You are helping incorporate clarification into a data analysis query.
+
+Previous user queries in this conversation:
+{chr(10).join(f"{i+1}. {q}" for i, q in enumerate(previous_queries))}
+
+Current user input: "{user_query}"
+
+This query includes additional clarification information. Your task:
+- If the clarification is a COMPLETE query (has action verb like "show", "need", "want"), use it as the main query
+- If the clarification is just additional context, incorporate it naturally into the original query
+- Make sure the final query is COMPLETE and STANDALONE
+- The clarification should be seamlessly integrated, not just appended
+
+Examples:
+Input: "show me by region. Additional information: I need revenue by region"
+Output: "Show revenue by region"
+
+Input: "Show sales. Additional information: for Q4 2023"
+Output: "Show sales for Q4 2023"
+
+CRITICAL: Return a natural, complete query that incorporates the clarification. No "Additional information:" markers in output.
+Return ONLY the complete expanded query text, nothing else. No explanations.
+"""
+        else:
+            expansion_prompt = f"""You are helping expand fragment queries in a data analysis conversation.
 
 Previous user queries in this conversation:
 {chr(10).join(f"{i+1}. {q}" for i, q in enumerate(previous_queries))}
@@ -912,7 +996,12 @@ Return ONLY the complete expanded query text, nothing else. No explanations.
                 "july", "august", "september", "october", "november", "december",
                 "week", "month", "quarter", "year", "last", "this", "recent", "latest"
             ])
-            if not (has_year or has_time_keyword):
+            
+            # Only ask for time period if query is incomplete (missing action, metric, or entity)
+            # If query is complete, time period is optional (defaults to all time)
+            query_is_complete = has_action and (has_metric or has_entity)
+            
+            if not (has_year or has_time_keyword) and not query_is_complete:
                 questions.append("Which time period?")
         
         # Check for performance without metric
@@ -1605,9 +1694,19 @@ Write as if explaining to a non-technical business user."""
         # Get conversation history
         chat_history = self._get_chat_history(session_id)
         
+        # Detect if this is a clarified query (has "Additional information:" or "Additional context:")
+        # Check BEFORE expansion to handle clarification properly
+        is_clarified_query = "Additional information:" in user_query or "Additional context:" in user_query
+        
         # STORY: Query Expansion Architecture - Story 1
         # Expand query at natural language level (no SQL parsing needed)
-        expanded_query = self._expand_query_with_context(user_query, chat_history)
+        # For clarified queries, skip expansion or handle specially to preserve clarification context
+        if is_clarified_query:
+            logger.info("Clarified query detected - preserving clarification context in expansion")
+            # For clarified queries, pass through expansion but preserve the clarification format
+            expanded_query = self._expand_query_with_context(user_query, chat_history, is_clarified=True)
+        else:
+            expanded_query = self._expand_query_with_context(user_query, chat_history)
         
         # Track if query was expanded (for logging/debugging)
         is_expanded = (expanded_query != user_query)
@@ -1615,8 +1714,7 @@ Write as if explaining to a non-technical business user."""
             logger.info(f"Query expanded: '{user_query}' → '{expanded_query}'")
         
         try:
-            # Detect if this is a clarified query (has "Additional context:")
-            skip_clarification = "Additional context:" in user_query
+            skip_clarification = is_clarified_query
             if skip_clarification:
                 logger.info("Clarified query detected - skipping ambiguity detection")
 

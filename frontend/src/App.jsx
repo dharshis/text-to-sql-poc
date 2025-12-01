@@ -53,6 +53,10 @@ function App() {
     originalQuery: '',
     clientId: null,
   });
+  // Clarification state for chat interface
+  const [clarificationQuestions, setClarificationQuestions] = useState([]);
+  const [originalQueryForClarification, setOriginalQueryForClarification] = useState('');
+  const [clarificationClientId, setClarificationClientId] = useState(null);
   const [agenticData, setAgenticData] = useState(null); // Explanation, reflection, etc.
 
   // Story 7.3: Conversation history state (AC6)
@@ -156,17 +160,19 @@ function App() {
         console.log(`Executing agentic query with session: ${sessionId}`);
         data = await executeAgenticQuery(query, sessionId, clientId, 10);
 
-        // Handle clarification if needed
+        // Handle clarification if needed - pass to chat instead of dialog
         if (data.needs_clarification) {
-          setClarificationDialog({
-            open: true,
-            questions: data.questions || ['Please provide more details about your query.'],
-            originalQuery: query,
-            clientId: clientId,
-          });
+          setClarificationQuestions(data.questions || ['Please provide more details about your query.']);
+          setOriginalQueryForClarification(query);
+          setClarificationClientId(clientId);
           setLoading(false);
           return;
         }
+
+        // Clear clarification state when query succeeds
+        setClarificationQuestions([]);
+        setOriginalQueryForClarification('');
+        setClarificationClientId(null);
 
         // Store agentic-specific data
         setAgenticData({
@@ -269,7 +275,28 @@ function App() {
     }
   };
 
-  // Handle clarification response
+  // Handle clarification response from chat
+  const handleClarificationResponse = async (response) => {
+    // Create a more natural query that incorporates the clarification
+    // Format: Original query + clarification in a clear, natural way
+    const enhancedQuery = `${originalQueryForClarification}. Additional information: ${response}`;
+
+    // Show the clarified query to user
+    setClarifiedQuery({
+      original: originalQueryForClarification,
+      clarification: response,
+      combined: enhancedQuery
+    });
+
+    // Clear clarification state
+    setClarificationQuestions([]);
+    setOriginalQueryForClarification('');
+    setClarificationClientId(null);
+
+    await handleQuerySubmit(enhancedQuery, clarificationClientId);
+  };
+
+  // Handle clarification response (for dialog - kept for backward compatibility)
   const handleClarificationSubmit = async (response) => {
     setClarificationDialog({ ...clarificationDialog, open: false });
 
@@ -308,6 +335,11 @@ function App() {
     setClarifiedQuery(null);
     setResults(null);
     setError(null);
+    
+    // Clear clarification state
+    setClarificationQuestions([]);
+    setOriginalQueryForClarification('');
+    setClarificationClientId(null);
 
     // Reset chat UI (triggers SearchBar to show initial message)
     setChatResetTrigger(prev => prev + 1);
@@ -395,6 +427,8 @@ function App() {
               loading={loading}
               disabled={!selectedClientId}
               resetTrigger={chatResetTrigger}
+              clarificationQuestions={clarificationQuestions}
+              onClarificationResponse={handleClarificationResponse}
             />
 
             {/* Pinned Insights */}
