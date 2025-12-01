@@ -15,13 +15,16 @@ import {
   Collapse,
   IconButton,
   Box,
+  Tooltip,
 } from '@mui/material';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import PushPinIcon from '@mui/icons-material/PushPin';
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import ReactMarkdown from 'react-markdown';
 
-const InsightCard = ({ explanation, keyDetails }) => {
+const InsightCard = ({ explanation, keyDetails, onPin, isPinned }) => {
   const [expanded, setExpanded] = useState(true);
 
   if (!explanation) {
@@ -48,13 +51,26 @@ const InsightCard = ({ explanation, keyDetails }) => {
               Key Insights
             </Typography>
           </Box>
-          <IconButton
-            onClick={() => setExpanded(!expanded)}
-            sx={{ color: 'white' }}
-            aria-label={expanded ? 'collapse' : 'expand'}
-          >
-            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          </IconButton>
+          <Box display="flex" alignItems="center" gap={0.5}>
+            {onPin && (
+              <Tooltip title={isPinned ? "Unpin insight" : "Pin insight for future reference"}>
+                <IconButton
+                  onClick={onPin}
+                  sx={{ color: isPinned ? '#ffd700' : 'rgba(255, 255, 255, 0.7)' }}
+                  aria-label={isPinned ? 'unpin' : 'pin'}
+                >
+                  {isPinned ? <PushPinIcon /> : <PushPinOutlinedIcon />}
+                </IconButton>
+              </Tooltip>
+            )}
+            <IconButton
+              onClick={() => setExpanded(!expanded)}
+              sx={{ color: 'white' }}
+              aria-label={expanded ? 'collapse' : 'expand'}
+            >
+              {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
         </Box>
 
         <Collapse in={expanded}>

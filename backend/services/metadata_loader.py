@@ -342,3 +342,4 @@ if __name__ == "__main__":
     results = loader.search_content("market value")
     print(f"Found {len(results)} documents containing 'market value'")
 
+

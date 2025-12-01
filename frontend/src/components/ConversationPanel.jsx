@@ -19,7 +19,7 @@ import { formatDistanceToNow } from 'date-fns';
 /**
  * Conversation History Panel
  * Story 7.3 - AC1-AC5
- * 
+ *
  * Professional slide-out panel showing conversation history with:
  * - Visual follow-up hierarchy (indentation)
  * - Status chips (success/error)
@@ -198,5 +198,3 @@ const ConversationPanel = ({
 };
 
 export default ConversationPanel;
-
-

@@ -265,3 +265,4 @@ LIMIT 20
 9. **Order** results meaningfully (by value DESC or by time ASC)
 
 10. **Corp_id filtering is MANDATORY** for all queries to enforce data isolation
+

@@ -179,16 +179,31 @@ class ClaudeService:
     def _get_filter_instruction(self, client_id, dataset_id=None):
         """
         Get dataset-specific filtering instruction for SQL generation (config-driven).
+        Enhanced with emphatic corp_id requirement (Story: Query Expansion Architecture - Story 3).
 
         Args:
             client_id (int): Client/Corporation ID
             dataset_id (str, optional): Dataset identifier
 
         Returns:
-            str: Filtering instruction for the LLM
+            str: Filtering instruction for the LLM (with strong emphasis on security)
         """
         if not dataset_id:
-            return f'ALWAYS include "WHERE client_id = {client_id}" in your queries'
+            return f"""
+🚨 CRITICAL SECURITY REQUIREMENT 🚨
+Data Isolation Filter: client_id = {client_id}
+
+EVERY query you generate MUST include this WHERE clause:
+WHERE client_id = {client_id}
+
+This is MANDATORY and NON-NEGOTIABLE for data security.
+- Include it in ALL queries (SELECT, aggregations, joins)
+- Include it in follow-up queries
+- Include it even if the user doesn't mention it
+- NEVER omit this filter
+
+Failure to include this will cause the query to be REJECTED by security validation.
+"""
 
         try:
             dataset_config = Config.get_dataset(dataset_id)
@@ -200,21 +215,50 @@ class ClaudeService:
 
                 if method == 'brand-hierarchy':
                     filter_table = client_iso.get('filter_table', 'Dim_Brand')
-                    return (f'MANDATORY: Filter by {filter_field} = {client_id} '
-                           f'through {filter_table} join. Refer to dataset-specific examples for hierarchy details.')
+                    return f"""
+🚨 CRITICAL SECURITY REQUIREMENT 🚨
+Brand Hierarchy Filtering: {filter_field} = {client_id}
+
+EVERY query MUST filter through {filter_table}:
+- Join to {filter_table}
+- WHERE {filter_field} = {client_id}
+
+This is MANDATORY. Queries without this filter will be REJECTED.
+See dataset-specific examples for hierarchy details.
+"""
                 elif method == 'row-level':
-                    return f'ALWAYS include "WHERE {filter_field} = {client_id}" in your queries'
+                    return f"""
+🚨 CRITICAL SECURITY REQUIREMENT 🚨
+Row-Level Filtering: {filter_field} = {client_id}
+
+EVERY query you generate MUST include:
+WHERE {filter_field} = {client_id}
+
+This is MANDATORY and NON-NEGOTIABLE for data security.
+Failure to include this will cause query REJECTION.
+"""
 
             # Default fallback
-            return f'ALWAYS include "WHERE client_id = {client_id}" in your queries'
+            return f"""
+🚨 CRITICAL SECURITY REQUIREMENT 🚨
+WHERE client_id = {client_id}
+
+MUST be included in EVERY query. No exceptions.
+"""
 
         except Exception as e:
             logger.warning(f"Error loading dataset config for {dataset_id}: {e}")
-            return f'ALWAYS include "WHERE client_id = {client_id}" in your queries'
+            return f"""
+🚨 CRITICAL SECURITY REQUIREMENT 🚨
+WHERE client_id = {client_id}
 
-    def generate_sql(self, natural_language_query, client_id, client_name=None, custom_schema=None, dataset_id=None):
+MUST be included in EVERY query. No exceptions.
+"""
+
+    def generate_sql(self, natural_language_query, client_id, client_name=None, custom_schema=None, dataset_id=None, conversation_context=None):
         """
         Generate SQL query from natural language using Claude API.
+        Story: STORY-001 - Conversation Context for Follow-Up Queries
 
         Args:
             natural_language_query (str): User's natural language query
@@ -222,6 +266,7 @@ class ClaudeService:
             client_name (str, optional): Client name for additional context
             custom_schema (str, optional): Custom database schema (overrides default)
             dataset_id (str, optional): Dataset identifier for dataset-specific instructions
+            conversation_context (str, optional): Formatted conversation history for follow-up queries (STORY-001)
 
         Returns:
             str: Generated SQL query
@@ -271,6 +316,11 @@ Generate the SQL query:"""
             "{FILTER_INSTRUCTION}",
             f"\n## Client Filtering Requirement\n\n{filter_instruction}\n"
         )
+
+        # NEW: Add conversation context (STORY-001, AC2)
+        if conversation_context:
+            system_prompt += f"\n{conversation_context}\n"
+            logger.info(f"Added conversation context to prompt ({len(conversation_context)} chars)")
 
         # Add visualization instructions
         system_prompt += f"\n{VISUALIZATION_INSTRUCTIONS}\n"

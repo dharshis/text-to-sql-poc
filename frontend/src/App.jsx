@@ -30,6 +30,7 @@ import IterationIndicator from './components/IterationIndicator';
 import ContextBadge from './components/ContextBadge';
 import ConversationPanel from './components/ConversationPanel';
 import ClientSelector from './components/ClientSelector';
+import PinnedInsights from './components/PinnedInsights';
 import { fetchClients, submitQuery, checkHealth, executeAgenticQuery, deleteSession } from './services/api';
 import ChatIcon from '@mui/icons-material/Chat';
 import { Badge, IconButton } from '@mui/material';
@@ -42,7 +43,7 @@ function App() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
   const [healthStatus, setHealthStatus] = useState(null);
-  
+
   // Agentic mode state (Architecture Section 9.3)
   const [agenticMode, setAgenticMode] = useState(true); // Default to agentic
   const [sessionId, setSessionId] = useState(null);
@@ -53,15 +54,29 @@ function App() {
     clientId: null,
   });
   const [agenticData, setAgenticData] = useState(null); // Explanation, reflection, etc.
-  
+
   // Story 7.3: Conversation history state (AC6)
   const [conversationHistory, setConversationHistory] = useState([]);
   const [conversationPanelOpen, setConversationPanelOpen] = useState(false);
   const [currentQueryIndex, setCurrentQueryIndex] = useState(-1);
-  
+
+  // Chat reset trigger (incremented to reset SearchBar messages)
+  const [chatResetTrigger, setChatResetTrigger] = useState(0);
+
   // Clarified query display
   const [clarifiedQuery, setClarifiedQuery] = useState(null);
-  
+
+  // Pinned insights state (with localStorage persistence)
+  const [pinnedInsights, setPinnedInsights] = useState(() => {
+    const saved = localStorage.getItem('pinnedInsights');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Save pinned insights to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('pinnedInsights', JSON.stringify(pinnedInsights));
+  }, [pinnedInsights]);
+
   // Initialize session ID on mount
   useEffect(() => {
     if (!sessionId) {
@@ -78,7 +93,7 @@ function App() {
         setClientsLoading(true);
         const clientList = await fetchClients();
         setClients(clientList);
-        
+
         // Auto-select first client if available
         if (clientList && clientList.length > 0) {
           setSelectedClientId(clientList[0].client_id);
@@ -116,7 +131,7 @@ function App() {
         setConversationPanelOpen(prev => !prev);
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
@@ -127,7 +142,7 @@ function App() {
     setError(null);
     setResults(null);
     setAgenticData(null);
-    
+
     // Clear clarified query unless it's the clarified query being submitted
     if (!clarifiedQuery || clarifiedQuery.combined !== query) {
       setClarifiedQuery(null);
@@ -135,12 +150,12 @@ function App() {
 
     try {
       let data;
-      
+
       if (agenticMode) {
         // Use agentic endpoint
         console.log(`Executing agentic query with session: ${sessionId}`);
         data = await executeAgenticQuery(query, sessionId, clientId, 10);
-        
+
         // Handle clarification if needed
         if (data.needs_clarification) {
           setClarificationDialog({
@@ -152,7 +167,7 @@ function App() {
           setLoading(false);
           return;
         }
-        
+
         // Store agentic-specific data
         setAgenticData({
           explanation: data.explanation,
@@ -162,27 +177,27 @@ function App() {
           resolved_query: data.resolved_query,
           key_details: data.key_details,
         });
-        
+
         // Transform agentic response to match ResultsDisplay format
         // Note: data.results is QueryExecutor response with nested structure
         const executionResult = data.results || {};
-        
+
         // Use security_validation if available (new), fallback to validation (old format)
         const securityValidation = data.security_validation || data.validation;
-        
+
         // Transform validation format to match ValidationMetrics component
         let validationForDisplay = null;
-        
+
         if (securityValidation) {
           // If it's the full security validation (from sql_validator.py)
           if (securityValidation.passed !== undefined) {
             validationForDisplay = securityValidation; // Use as-is (already correct format)
-          } 
+          }
           // If it's the old agentic validation format
           else if (securityValidation.is_valid !== undefined) {
             validationForDisplay = {
               passed: securityValidation.is_valid,
-              checks: securityValidation.issues && securityValidation.issues.length > 0 
+              checks: securityValidation.issues && securityValidation.issues.length > 0
                 ? securityValidation.issues.map(issue => ({
                     name: 'Validation',
                     status: 'FAIL',
@@ -197,7 +212,7 @@ function App() {
             };
           }
         }
-        
+
         setResults({
           sql: data.sql,
           results: executionResult.results || [],  // Extract actual data array
@@ -206,19 +221,19 @@ function App() {
           validation: validationForDisplay,
           method: 'agentic',
         });
-        
+
         // Story 7.3: Add to conversation history (AC6)
         const historyEntry = {
           user_query: query,
           resolved_query: data.resolution_info?.interpreted_as || query,
           timestamp: new Date().toISOString(),
           success: data.success !== false,
-          results_summary: executionResult.row_count 
-            ? `${executionResult.row_count} rows` 
+          results_summary: executionResult.row_count
+            ? `${executionResult.row_count} rows`
             : 'No results',
           is_followup: data.is_followup || false
         };
-        
+
         setConversationHistory(prev => [...prev, historyEntry]);
         setCurrentQueryIndex(conversationHistory.length); // Index of newly added entry
       } else {
@@ -226,7 +241,7 @@ function App() {
         data = await submitQuery(query, clientId);
         setResults(data);
       }
-      
+
     } catch (err) {
       console.error('Query failed:', err);
 
@@ -253,51 +268,91 @@ function App() {
       setLoading(false);
     }
   };
-  
+
   // Handle clarification response
   const handleClarificationSubmit = async (response) => {
     setClarificationDialog({ ...clarificationDialog, open: false });
-    
+
     // Resubmit query with additional context
     const enhancedQuery = `${clarificationDialog.originalQuery}\nAdditional context: ${response}`;
-    
+
     // Show the clarified query to user
     setClarifiedQuery({
       original: clarificationDialog.originalQuery,
       clarification: response,
       combined: enhancedQuery
     });
-    
+
     await handleQuerySubmit(enhancedQuery, clarificationDialog.clientId);
   };
-  
+
   // Story 7.3: Handle clear conversation (AC6)
   // Enhanced: Deletes old session from backend memory before creating new one
   const handleClearConversation = async () => {
     const oldSessionId = sessionId;
-    
+
     // Delete old session from backend (ensures complete memory cleanup)
     if (oldSessionId) {
       console.log(`Deleting old session: ${oldSessionId}`);
       await deleteSession(oldSessionId);
     }
-    
+
     // Generate new session ID
     const newSessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     setSessionId(newSessionId);
-    
+
     // Clear frontend history
     setConversationHistory([]);
     setCurrentQueryIndex(-1);
     setAgenticData(null);
     setClarifiedQuery(null);
-    
+    setResults(null);
+    setError(null);
+
+    // Reset chat UI (triggers SearchBar to show initial message)
+    setChatResetTrigger(prev => prev + 1);
+
     // Close panel
     setConversationPanelOpen(false);
-    
+
     console.log(`✅ Session cleared and deleted from backend`);
     console.log(`✅ New session created: ${newSessionId}`);
     console.log(`✅ No memory of previous session exists`);
+    console.log(`✅ Chat UI reset to initial state`);
+  };
+
+  // Handle pinning an insight
+  const handlePinInsight = () => {
+    if (!agenticData?.explanation) return;
+
+    const insightId = `insight-${Date.now()}`;
+    const pinnedInsight = {
+      id: insightId,
+      query: results?.sql || '',
+      userQuery: agenticData?.resolved_query || '',
+      explanation: agenticData.explanation,
+      keyDetails: agenticData.key_details,
+      timestamp: new Date().toISOString(),
+      client: clients.find(c => c.client_id === selectedClientId)?.client_name || 'Unknown',
+    };
+
+    setPinnedInsights(prev => [pinnedInsight, ...prev]);
+    console.log('Insight pinned:', insightId);
+  };
+
+  // Handle unpinning an insight
+  const handleUnpinInsight = (insightId) => {
+    setPinnedInsights(prev => prev.filter(insight => insight.id !== insightId));
+    console.log('Insight unpinned:', insightId);
+  };
+
+  // Check if current insight is pinned
+  const isCurrentInsightPinned = () => {
+    if (!agenticData?.explanation) return false;
+    return pinnedInsights.some(insight =>
+      insight.explanation === agenticData.explanation &&
+      insight.query === results?.sql
+    );
   };
 
   return (
@@ -339,7 +394,53 @@ function App() {
               onSubmit={handleQuerySubmit}
               loading={loading}
               disabled={!selectedClientId}
+              resetTrigger={chatResetTrigger}
             />
+
+            {/* Pinned Insights */}
+            <PinnedInsights
+              pinnedInsights={pinnedInsights}
+              onUnpin={handleUnpinInsight}
+            />
+
+            {/* Conversation History Button */}
+            {agenticMode && conversationHistory.length > 0 && (
+              <Box sx={{ mb: 3 }}>
+                <Box
+                  onClick={() => setConversationPanelOpen(true)}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    p: 2,
+                    border: '1px solid #E8EDF2',
+                    borderRadius: 2,
+                    backgroundColor: '#FFFFFF',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    '&:hover': {
+                      borderColor: '#4A90E2',
+                      boxShadow: '0 2px 8px rgba(74, 144, 226, 0.15)',
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <ChatIcon sx={{ fontSize: 22, color: '#4A90E2' }} />
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight={600} color="#2C3E50">
+                        Conversation History
+                      </Typography>
+                      <Typography variant="caption" color="#7B8794">
+                        View past queries and results
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Badge badgeContent={conversationHistory.length} color="primary">
+                    <Box sx={{ width: 24, height: 24 }} />
+                  </Badge>
+                </Box>
+              </Box>
+            )}
 
             {/* Iteration Indicator */}
             {loading && agenticData?.iterations && (
@@ -382,19 +483,6 @@ function App() {
                     }
                     label={agenticMode ? '🤖 Agentic Mode' : '⚡ Classic Mode'}
                   />
-
-                  {/* Story 7.3: History button (AC6) */}
-                  {agenticMode && (
-                    <IconButton
-                      onClick={() => setConversationPanelOpen(true)}
-                      aria-label="conversation history"
-                      title="View conversation history (Cmd/Ctrl + H)"
-                    >
-                      <Badge badgeContent={conversationHistory.length} color="primary">
-                        <ChatIcon />
-                      </Badge>
-                    </IconButton>
-                  )}
 
                   {/* Backend Health Status */}
                   {healthStatus && (
@@ -463,9 +551,11 @@ function App() {
             {agenticMode && results && (
               <>
                 {/* PRIMARY: Insight Card at TOP */}
-                <InsightCard 
+                <InsightCard
                   explanation={agenticData?.explanation}
                   keyDetails={agenticData?.key_details}
+                  onPin={handlePinInsight}
+                  isPinned={isCurrentInsightPinned()}
                 />
               </>
             )}

@@ -135,6 +135,59 @@ class AgenticText2SQLService:
         
         logger.info(f"Session {session_id}: added entry, total={len(self.chat_sessions[session_id])}")
 
+    def _format_conversation_context(self, session_id: str, max_entries: int = 5) -> str:
+        """
+        Format recent conversation history for Claude context.
+        Story: STORY-001 - Conversation Context for Follow-Up Queries
+        AC1: Context Formatting
+
+        Args:
+            session_id: Session identifier
+            max_entries: Maximum number of queries to include (default: 5)
+
+        Returns:
+            Formatted markdown string with conversation context, or empty string if no history
+        """
+        history = self._get_chat_history(session_id)
+
+        # No history - return empty string (AC1, edge case handling)
+        if not history:
+            logger.debug(f"No conversation history for session {session_id}")
+            return ""
+
+        # Get last N entries
+        recent_history = history[-max_entries:]
+
+        # Filter out failed/incomplete entries (no SQL generated)
+        valid_entries = [
+            entry for entry in recent_history
+            if entry.get('sql_query') and entry.get('sql_query').strip()
+        ]
+
+        if not valid_entries:
+            logger.debug(f"No valid entries with SQL in session {session_id}")
+            return ""
+
+        # Build simple conversation context - no filter extraction needed
+        # LLM can infer context from seeing previous queries and SQL
+        context = "\n## Previous Queries in This Conversation:\n\n"
+
+        for i, entry in enumerate(valid_entries, 1):
+            user_query = entry.get('user_query', 'Unknown query')
+            sql_query = entry.get('sql_query', '')
+
+            # Show SQL (truncated for tokens)
+            sql_truncated = sql_query[:300] + "..." if len(sql_query) > 300 else sql_query
+
+            context += f"**Query {i}:** {user_query}\n"
+            context += f"```sql\n{sql_truncated}\n```\n\n"
+
+        context += "**Context Instruction:** Maintain the scope and filters from the most recent query above "
+        context += "unless the user explicitly changes the context (e.g., 'show me Europe instead', 'start fresh').\n"
+
+        logger.info(f"Formatted conversation context for session {session_id}: {len(valid_entries)} queries, {len(context)} chars")
+        return context
+
     def _load_domain_vocabulary(self, dataset_id: str) -> Dict[str, List[str]]:
         """
         Load or extract domain vocabulary for dataset.
@@ -400,6 +453,119 @@ Respond in JSON format:
                 "entities_inherited": {}
             }
     
+    def _expand_query_with_context(self, user_query: str, chat_history: List[Dict]) -> str:
+        """
+        Expand fragment/follow-up queries into complete queries using conversation context.
+        Works at natural language level - no SQL parsing needed.
+        
+        Story: Query Expansion Architecture - Story 1
+        
+        Args:
+            user_query: Current user input (may be fragment like "by region" or complete query)
+            chat_history: Previous queries in conversation (for context)
+            
+        Returns:
+            Expanded, standalone natural language query
+            
+        Examples:
+            Previous: "Show sales in 2023"
+            Input: "by region"
+            Output: "Show sales in 2023 by region"
+            
+            Previous: "Show sales in 2023", "by region"
+            Input: "for Africa"  
+            Output: "Show sales in 2023 by region for Africa"
+        """
+        logger.info(f"Expanding query: '{user_query}'")
+        start_time = datetime.now()
+        
+        # No history = use query as-is
+        if not chat_history:
+            logger.info("No history for expansion, using query as-is")
+            return user_query
+        
+        # Get last 3-5 user queries (just NL, not SQL) for context
+        recent_history = chat_history[-5:] if len(chat_history) > 5 else chat_history
+        previous_queries = [entry.get('user_query', '') for entry in recent_history]
+        
+        # Build expansion prompt
+        expansion_prompt = f"""You are helping expand fragment queries in a data analysis conversation.
+
+Previous user queries in this conversation:
+{chr(10).join(f"{i+1}. {q}" for i, q in enumerate(previous_queries))}
+
+Current user input: "{user_query}"
+
+Your task:
+- If this is a FRAGMENT or FOLLOW-UP (like "by region", "for 2024", "what about Q2"), expand it into a COMPLETE, STANDALONE query using context
+- If this is already a COMPLETE query, return it unchanged
+- When expanding, intelligently decide: Is user adding to context or replacing context?
+  - "by region" = additive (keep previous scope, add dimension)
+  - "what about 2024?" = replacement (replace time period, keep structure)
+  - "show me brands instead" = new topic (ignore previous context)
+
+CRITICAL: The expanded query must be COMPLETE and include the full query intent, NOT just the new filter.
+WRONG: "WHERE corp_id = 105"
+RIGHT: "Show sales by region for corporation 105"
+
+Return ONLY the complete expanded query text, nothing else. No explanations.
+"""
+        
+        try:
+            # Call Claude with low temperature for consistent expansion
+            response = self.claude_service.client.messages.create(
+                model=self.claude_service.model,
+                max_tokens=200,  # Short response expected
+                temperature=0.2,  # Low temp for consistency
+                system="You are a query expansion assistant. You MUST output a complete, standalone natural language query. NEVER output SQL fragments or WHERE clauses. Output only the full expanded query as natural language, nothing else.",
+                messages=[{"role": "user", "content": expansion_prompt}]
+            )
+            
+            expanded_query = response.content[0].text.strip()
+
+            # Remove quotes if Claude added them
+            if expanded_query.startswith('"') and expanded_query.endswith('"'):
+                expanded_query = expanded_query[1:-1]
+
+            # SAFETY CHECK: Validate that expanded query is not a SQL fragment
+            sql_fragment_indicators = [
+                "WHERE ", "SELECT ", "FROM ", "JOIN ", "GROUP BY",
+                "ORDER BY", "LIMIT ", "corp_id =", "client_id ="
+            ]
+            is_sql_fragment = any(indicator.lower() in expanded_query.lower() for indicator in sql_fragment_indicators)
+
+            if is_sql_fragment:
+                logger.error(f"⚠️ Query expansion returned SQL fragment instead of natural language: '{expanded_query}'")
+                logger.error(f"Falling back to previous query context for safety")
+                # Fallback: Use the most recent complete query with the user's input appended
+                if previous_queries:
+                    last_query = previous_queries[-1]
+                    expanded_query = f"{last_query} {user_query}"
+                    logger.warning(f"Fallback expansion: '{expanded_query}'")
+                else:
+                    # No history, use original query
+                    expanded_query = user_query
+                    logger.warning(f"No history available, using original query: '{user_query}'")
+
+            elapsed = (datetime.now() - start_time).total_seconds()
+
+            if expanded_query != user_query:
+                logger.info(f"Query expanded in {elapsed:.2f}s: '{user_query}' → '{expanded_query}'")
+            else:
+                logger.info(f"Query unchanged (complete query): '{user_query}'")
+
+            # Performance target: < 1 second
+            if elapsed > 1.0:
+                logger.warning(f"Query expansion exceeded 1s target: {elapsed:.2f}s")
+
+            return expanded_query
+            
+        except Exception as e:
+            logger.error(f"Query expansion failed: {e}", exc_info=True)
+            # Fallback: use original query
+            logger.info("Falling back to original query")
+            return user_query
+    
     def _extract_entities(self, state: AgentState) -> Dict:
         """
         Extract semantic entities from generated SQL query.
@@ -524,16 +690,21 @@ Respond in JSON format:
         """
         Summarize query results into human-readable string.
         Story 7.2 - AC3: Results Summarization
-        
+
         Args:
             execution_result: Dict with results, columns, row_count
-            
+
         Returns:
             Summary string like "5 rows: Le Creuset ($12K) (top)"
         """
         if not execution_result:
             return "0 rows"
-        
+
+        # STORY-001: Defensive check - if execution_result is already a string (shouldn't happen)
+        if isinstance(execution_result, str):
+            logger.warning(f"execution_result is a string, not dict: {execution_result[:100]}")
+            return execution_result
+
         # Note: QueryExecutor returns 'results' key (Story 7.1 fix)
         results = execution_result.get("results", [])
         row_count = execution_result.get("row_count", 0)
@@ -890,15 +1061,24 @@ Respond in JSON format:
         Generate SQL using Claude with collected context.
         Architecture Reference: Section 5.3 (SQL Generation Node)
         Performance Target: ≤2s (Section 13.1)
+        Story: STORY-001 - Conversation Context for Follow-Up Queries
         """
         query = state["user_query"]
         schema = state.get("schema")
-        
+        session_id = state.get("session_id")  # NEW: Get session_id for context retrieval
+
         logger.info(f"Generating SQL for: '{query[:100]}'")
         logger.info(f"Using schema: {'Yes' if schema else 'No (using default)'}")
-        
+
+        # NEW: Format conversation context (STORY-001, AC1)
+        conversation_context = None
+        if session_id:
+            conversation_context = self._format_conversation_context(session_id, max_entries=5)
+            if conversation_context:
+                logger.info(f"Including conversation context ({len(conversation_context)} chars)")
+
         start_time = datetime.now()
-        
+
         try:
             # Call existing ClaudeService with custom schema (Architecture Section 11.1)
             sql_query = self.claude_service.generate_sql(
@@ -906,7 +1086,8 @@ Respond in JSON format:
                 client_id=state.get("client_id", 1),
                 client_name=state.get("client_name"),
                 custom_schema=schema,  # Use schema from active dataset
-                dataset_id=state.get("dataset_id", "sales")  # Pass dataset for filtering instructions
+                dataset_id=state.get("dataset_id", "sales"),  # Pass dataset for filtering instructions
+                conversation_context=conversation_context  # NEW: Pass context to Claude (STORY-001, AC2)
             )
 
             # Log raw response for debugging
@@ -926,9 +1107,12 @@ Respond in JSON format:
             if elapsed > 2.0:
                 logger.warning(f"SQL generation exceeded 2s target: {elapsed:.2f}s")
             
-            # Security validation (NEW - POC enhancement)
-            # Validate SQL for client isolation and security requirements
+            # STORY: Query Expansion Architecture - Story 3 (Corp ID Safety Net)
+            # Option C: Auto-inject corp_id if missing, with loud logging
             client_id = state.get("client_id", 1)
+            sql = self._ensure_corp_id_filter(sql, client_id)
+            
+            # Security validation (runs after auto-injection as additional safety layer)
             dataset_id = state.get("dataset_id", "sales")
             security_validation = self._validate_sql_security(sql, client_id, dataset_id)
             
@@ -964,15 +1148,47 @@ Respond in JSON format:
     def _extract_sql(self, sql_response: str) -> str:
         """
         Extract clean SQL from Claude response.
-        Removes markdown code blocks, chart_metadata JSON, and extra whitespace.
+        Removes markdown code blocks, chart_metadata JSON, explanatory text, and extra whitespace.
         Architecture Reference: Section 5.3
         """
-        logger.debug(f"Extracting SQL from response: {sql_response[:100]}...")
+        logger.debug(f"Extracting SQL from response: {sql_response[:200]}...")
 
         sql = sql_response.strip()
 
-        # Remove markdown code blocks (```sql ... ``` or ``` ... ```)
-        if sql.startswith('```'):
+        # CRITICAL FIX: If response contains markdown SQL block, extract ONLY the SQL
+        # This handles cases where Claude adds explanatory text before the SQL
+        if '```sql' in sql.lower() or '```\nselect' in sql.lower():
+            # Find the start of the SQL block
+            sql_block_start = sql.lower().find('```sql')
+            if sql_block_start == -1:
+                sql_block_start = sql.lower().find('```\nselect')
+
+            if sql_block_start != -1:
+                # Extract from the code block start
+                sql = sql[sql_block_start:]
+
+                # Find the closing ```
+                closing_backticks = sql.find('```', 3)  # Start search after opening ```
+                if closing_backticks != -1:
+                    sql = sql[3:closing_backticks]  # Extract content between backticks
+                    # Remove 'sql' language tag if present
+                    if sql.lower().startswith('sql\n'):
+                        sql = sql[4:]
+                    elif sql.lower().startswith('sql '):
+                        sql = sql[4:]
+                else:
+                    # No closing backticks found, remove opening ```
+                    sql = sql[3:]
+                    if sql.lower().startswith('sql\n'):
+                        sql = sql[4:]
+                    elif sql.lower().startswith('sql '):
+                        sql = sql[4:]
+
+                sql = sql.strip()
+                logger.info("Extracted SQL from markdown code block, removed explanatory text")
+
+        # Fallback: Handle simple ``` blocks without 'sql' tag
+        elif sql.startswith('```'):
             lines = sql.split('\n')
             # Filter out lines that are just backticks or language tags
             sql_lines = []
@@ -981,6 +1197,7 @@ Respond in JSON format:
                     continue
                 sql_lines.append(line)
             sql = '\n'.join(sql_lines).strip()
+            logger.info("Extracted SQL from simple markdown block")
 
         # Remove chart_metadata JSON if present (it will be parsed separately)
         # Look for opening brace that starts the JSON object
@@ -993,7 +1210,17 @@ Respond in JSON format:
                 sql = sql[:chart_meta_pos].strip()
                 logger.debug("Removed chart_metadata JSON from SQL")
 
-        logger.debug(f"Extracted SQL: {sql[:100]}...")
+        # Final validation: SQL should start with SELECT, WITH, or INSERT/UPDATE/DELETE
+        sql_upper = sql.upper().strip()
+        if not any(sql_upper.startswith(kw) for kw in ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE']):
+            logger.warning(f"Extracted SQL doesn't start with valid keyword. First 100 chars: {sql[:100]}")
+            # Try to find SELECT and extract from there
+            select_pos = sql_upper.find('SELECT')
+            if select_pos != -1:
+                sql = sql[select_pos:]
+                logger.info(f"Found SELECT at position {select_pos}, extracted from there")
+
+        logger.debug(f"Final extracted SQL (first 200 chars): {sql[:200]}...")
 
         return sql
 
@@ -1054,6 +1281,11 @@ Respond in JSON format:
             return self._fallback_chart_metadata(execution_result)
 
         # Validation: Ensure referenced columns exist in SQL results
+        # STORY-001: Defensive check - ensure execution_result is a dict
+        if not execution_result or isinstance(execution_result, str):
+            logger.warning(f"Invalid execution_result in chart validation: {type(execution_result)}")
+            return self._fallback_chart_metadata({})
+
         actual_columns = execution_result.get("columns", [])
 
         x_axis = chart_metadata.get("x_axis")
@@ -1091,6 +1323,17 @@ Respond in JSON format:
         Returns:
             Fallback chart metadata dict
         """
+        # STORY-001: Defensive check - ensure execution_result is a dict
+        if not execution_result or isinstance(execution_result, str):
+            logger.warning(f"Invalid execution_result in _fallback_chart_metadata: {type(execution_result)}")
+            return {
+                "type": "table",
+                "x_axis": None,
+                "y_axes": [],
+                "recommended": False,
+                "reason": "Invalid execution result"
+            }
+
         columns = execution_result.get("columns", [])
         row_count = execution_result.get("row_count", 0)
 
@@ -1146,7 +1389,8 @@ Respond in JSON format:
         issues = []
         
         # Critical error detection (Architecture Section 5.3.3)
-        if execution_result and not execution_result.get("success"):
+        # STORY-001: Defensive check - ensure execution_result is a dict before calling .get()
+        if execution_result and isinstance(execution_result, dict) and not execution_result.get("success"):
             error_msg = execution_result.get("error", "").lower()
             
             # Critical keywords from architecture
@@ -1358,25 +1602,17 @@ Write as if explaining to a non-technical business user."""
         start_time = datetime.now()
         logger.info(f"Starting agentic workflow: session={session_id}, query='{user_query[:100]}'")
         
-        # Get conversation history (Architecture Section 7.1)
+        # Get conversation history
         chat_history = self._get_chat_history(session_id)
         
-        # Story 7.1: Detect and resolve follow-up queries
-        is_followup, confidence = self._detect_followup(user_query, chat_history)
-        resolution = None
+        # STORY: Query Expansion Architecture - Story 1
+        # Expand query at natural language level (no SQL parsing needed)
+        expanded_query = self._expand_query_with_context(user_query, chat_history)
         
-        if is_followup:
-            logger.info(f"Follow-up detected (confidence: {confidence:.2f})")
-            resolution = self._resolve_query_with_history(user_query, chat_history)
-            resolved_query = resolution['resolved_query']
-            resolution_confidence = resolution.get('confidence', 0.5)
-            
-            # Low confidence warning (Story 7.1 spec)
-            if resolution_confidence < 0.8:
-                logger.warning(f"Low resolution confidence: {resolution_confidence:.2f}, may need clarification")
-        else:
-            logger.info("New query (not a follow-up)")
-            resolved_query = user_query
+        # Track if query was expanded (for logging/debugging)
+        is_expanded = (expanded_query != user_query)
+        if is_expanded:
+            logger.info(f"Query expanded: '{user_query}' → '{expanded_query}'")
         
         try:
             # Detect if this is a clarified query (has "Additional context:")
@@ -1388,14 +1624,14 @@ Write as if explaining to a non-technical business user."""
             client_name = self._fetch_client_name(client_id, dataset_id)
             logger.error(f"DEBUG: Fetched client_name='{client_name}' for client_id={client_id}, dataset={dataset_id}")
             
-            # Initialize state (Architecture Section 4.1 + Story 7.1 + Dataset Support)
+            # Initialize state (Architecture Section 4.1 + Query Expansion Architecture)
             initial_state: AgentState = {
-                "user_query": user_query,
+                "user_query": user_query,  # Original user input
                 "session_id": session_id,
-                "resolved_query": resolved_query,
+                "resolved_query": expanded_query,  # Expanded/complete query for SQL generation
                 "client_id": client_id,
                 "client_name": client_name,
-                "dataset_id": dataset_id,  # Dataset support
+                "dataset_id": dataset_id,
                 "chat_history": [],
                 "iteration": 0,
                 "max_iterations": max_iterations,
@@ -1410,8 +1646,8 @@ Write as if explaining to a non-technical business user."""
                 "reflection_result": None,
                 "clarification_needed": False,
                 "clarification_questions": [],
-                "is_followup": is_followup,
-                "resolution_info": resolution,
+                "is_followup": is_expanded,  # True if query was expanded
+                "resolution_info": {"expanded_query": expanded_query, "was_expanded": is_expanded},
                 "tool_calls": [],
                 "next_action": "plan",
                 "is_complete": False,
@@ -1426,28 +1662,18 @@ Write as if explaining to a non-technical business user."""
             elapsed = (datetime.now() - start_time).total_seconds()
             logger.info(f"Workflow completed in {elapsed:.2f}s, {final_state.get('iteration', 0)} iterations")
             
-            # Store to session history with enhanced metadata (Story 7.2)
+            # Store to session history (simplified - Query Expansion Architecture)
             if final_state.get("sql_query") and not final_state.get("clarification_needed"):
-                execution_result = final_state.get("execution_result", {})
-                
-                # Story 7.2: Extract entities from SQL
-                key_entities = self._extract_entities(final_state)
-                
-                # Story 7.2: Summarize results
-                results_summary = self._summarize_results(execution_result)
-                
-                # Build enhanced history entry (Story 7.2 - AC1)
+                # Simplified history entry - no filter extraction needed
                 history_entry = {
-                    "user_query": user_query,
-                    "resolved_query": resolved_query,
-                    "sql": final_state.get("sql_query"),
-                    "results_summary": results_summary,
-                    "key_entities": key_entities,
+                    "user_query": user_query,  # Original user input
+                    "expanded_query": expanded_query,  # Expanded query (if any)
+                    "sql_query": final_state.get("sql_query"),  # Generated SQL
                     "timestamp": datetime.now().isoformat(),
-                    "is_followup": is_followup
+                    "was_expanded": is_expanded  # Track if expansion occurred
                 }
                 self._add_to_history(session_id, history_entry)
-                logger.info(f"Added enhanced history entry with {len(key_entities.get('dimensions', []))} dimensions, {len(key_entities.get('metrics', []))} metrics")
+                logger.info(f"Added history entry: '{user_query}' (expanded: {is_expanded})")
             
             return self._format_response(final_state)
             
@@ -1538,9 +1764,9 @@ Write as if explaining to a non-technical business user."""
         
         return response
     
-    def _extract_filters_from_sql(self, state: AgentState) -> List[str]:
+    def _extract_filters_from_state(self, state: AgentState) -> List[str]:
         """
-        Extract human-readable filters from SQL query.
+        Extract human-readable filters from SQL query in agent state.
         
         Args:
             state: Current agent state with SQL query
@@ -1602,16 +1828,24 @@ Write as if explaining to a non-technical business user."""
     def _format_result_summary(self, execution_result: Dict) -> str:
         """
         Format a human-readable summary of the query result.
-        
+
         Args:
             execution_result: Query execution result with data
-            
+
         Returns:
             Human-readable result summary
         """
-        if not execution_result or not execution_result.get("results"):
+        if not execution_result:
             return "No results found"
-        
+
+        # STORY-001: Defensive check - if execution_result is a string
+        if isinstance(execution_result, str):
+            logger.warning(f"execution_result is a string in _format_result_summary: {execution_result[:100]}")
+            return execution_result
+
+        if not execution_result.get("results"):
+            return "No results found"
+
         results = execution_result["results"]
         row_count = len(results)
         
@@ -1708,9 +1942,10 @@ Write as if explaining to a non-technical business user."""
             "dataset": dataset_config.get("name", dataset_id),
             "client": state.get("client_name", "Unknown"),
             "client_id": state.get("client_id"),
-            "filters_applied": self._extract_filters_from_sql(state),
+            "filters_applied": self._extract_filters_from_state(state),
             "result": self._format_result_summary(execution_result),
-            "row_count": len(execution_result.get("results", [])) if execution_result else 0
+            # STORY-001: Defensive check - ensure execution_result is a dict
+            "row_count": len(execution_result.get("results", [])) if execution_result and isinstance(execution_result, dict) else 0
         }
         
         return key_details
@@ -1897,6 +2132,86 @@ Write as if explaining to a non-technical business user."""
         except Exception as e:
             logger.error(f"Validation failed: {e}", exc_info=True)
             raise  # Re-raise for Tool class to handle
+    
+    def _ensure_corp_id_filter(self, sql: str, client_id: int) -> str:
+        """
+        Hybrid security approach (Option C): Ensure corp_id filter exists.
+        Auto-inject if missing, but log LOUDLY for monitoring.
+        
+        Story: Query Expansion Architecture - Story 3
+        Goal: Reduce auto-injection frequency to zero over time through prompt improvements.
+        
+        Args:
+            sql: Generated SQL query
+            client_id: Expected client/corporation ID
+            
+        Returns:
+            SQL with corp_id filter guaranteed to exist
+        """
+        # Check if corp_id filter exists (case-insensitive)
+        sql_lower = sql.lower()
+        corp_id_patterns = [
+            f"corp_id = {client_id}",
+            f"corp_id={client_id}",
+            f"corp_id = '{client_id}'",  # Sometimes might be quoted
+        ]
+        
+        has_corp_id = any(pattern in sql_lower for pattern in [p.lower() for p in corp_id_patterns])
+        
+        if has_corp_id:
+            return sql  # All good!
+        
+        # ⚠️ CORP_ID MISSING - AUTO-INJECT WITH LOUD LOGGING
+        logger.warning("=" * 80)
+        logger.warning("⚠️  CORP_ID AUTO-INJECTION TRIGGERED")
+        logger.warning("=" * 80)
+        logger.warning(f"Client ID: {client_id}")
+        logger.warning(f"SQL (BEFORE): {sql[:200]}...")
+        logger.warning("")
+        logger.warning("Claude forgot to include the mandatory corp_id filter!")
+        logger.warning("This indicates a prompt engineering issue that needs fixing.")
+        logger.warning("")
+        logger.warning("ACTION REQUIRED:")
+        logger.warning("1. Review system prompt for corp_id emphasis")
+        logger.warning("2. Check if conversation context mentions corp_id requirement")
+        logger.warning("3. Monitor frequency - goal is to reduce this to ZERO")
+        logger.warning("=" * 80)
+        
+        # Auto-inject corp_id into WHERE clause
+        try:
+            sql_upper = sql.upper()
+            
+            if "WHERE" in sql_upper:
+                # Add corp_id to existing WHERE clause
+                where_pos = sql_upper.find("WHERE")
+                # Find position after WHERE keyword
+                after_where = where_pos + 5  # len("WHERE")
+                
+                # Insert corp_id condition at start of WHERE clause
+                sql = sql[:after_where] + f" corp_id = {client_id} AND " + sql[after_where:]
+            else:
+                # Add WHERE clause with corp_id
+                # Find good insertion point (before GROUP BY, ORDER BY, LIMIT, or end)
+                insertion_keywords = ["GROUP BY", "ORDER BY", "LIMIT", "HAVING"]
+                insertion_pos = len(sql)
+                
+                for keyword in insertion_keywords:
+                    pos = sql_upper.find(keyword)
+                    if pos != -1 and pos < insertion_pos:
+                        insertion_pos = pos
+                
+                # Insert WHERE clause
+                sql = sql[:insertion_pos] + f" WHERE corp_id = {client_id} " + sql[insertion_pos:]
+            
+            logger.warning(f"SQL (AFTER):  {sql[:200]}...")
+            logger.warning("✅ Corp ID filter auto-injected successfully")
+            logger.warning("=" * 80)
+            
+        except Exception as e:
+            logger.error(f"Failed to auto-inject corp_id: {e}", exc_info=True)
+            logger.error("SQL remains unchanged - will likely fail security validation")
+        
+        return sql
     
     def _validate_sql_security(self, sql: str, client_id: int, dataset_id: str = "sales") -> Dict:
         """

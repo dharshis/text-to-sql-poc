@@ -1,0 +1,189 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>N/A</epicId>
+    <storyId>STORY-001</storyId>
+    <title>Conversation Context for Follow-Up Queries</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>STORY-conversation-context.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>business analyst using the text-to-SQL application</asA>
+    <iWant>my follow-up queries to remember the context from previous queries in the same session</iWant>
+    <soThat>I can drill down into data without repeating filters each time</soThat>
+    <tasks>
+      - Implement `_format_conversation_context()` method (backend/services/agentic_text2sql_service.py after line 136)
+      - Update `_generate_sql_node()` to retrieve and pass context (lines 890-916)
+      - Update `claude_service.generate_sql()` to accept conversation_context parameter (line 215)
+      - Inject context into system prompt (claude_service.py lines 248-276)
+      - Test AC1-AC8 acceptance criteria
+      - Verify performance benchmarks (context formatting &lt;200ms, latency &lt;500ms)
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC1" title="Context Formatting">
+      Given a session with previous query history
+      When the system prepares to generate SQL for a new query
+      Then it should format the last 5 queries into structured context including:
+      - User's original query
+      - Resolved/interpreted query
+      - Key filters applied (dimensions, metrics, time)
+      - Results summary
+    </ac>
+    <ac id="AC2" title="Context Injection">
+      Given formatted conversation context exists
+      When calling Claude API to generate SQL
+      Then the context should be appended to the system prompt
+      And a log message should confirm context was added
+    </ac>
+    <ac id="AC3" title="Basic Context Inheritance">
+      Given Query 1: "Show me the market trend in 2024"
+      When Query 2 is submitted: "Break it down by month"
+      Then the generated SQL should filter to fiscal_year = 2024
+      And should NOT include data from 2020-2023
+    </ac>
+    <ac id="AC4" title="Multi-Level Drilldown">
+      Given a sequence of queries (AB InBev 2023 → By quarter → Just Q1 → By month → Top brands)
+      Then all queries maintain corp_id filter and year=2023, queries 3-5 maintain quarter=1
+    </ac>
+    <ac id="AC5" title="Explicit Context Override">
+      Given Query 1: "Market trend in 2024"
+      When Query 2 explicitly overrides: "Show me 2023 instead"
+      Then the generated SQL should use fiscal_year = 2023 (ignoring previous 2024 filter)
+    </ac>
+    <ac id="AC6" title="Clear Conversation Resets Context">
+      Given Query 1 with 2024 filter, when user clicks "Clear Conversation"
+      Then Query 2 should NOT have 2024 context
+    </ac>
+    <ac id="AC7" title="Context Window Limit">
+      Given a session with 7 previous queries
+      When preparing context for Query 8
+      Then only queries 3-7 (last 5) should be included
+    </ac>
+    <ac id="AC8" title="Performance">
+      Context formatting must add &lt;200ms
+      Total latency increase must be &lt;500ms
+    </ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <!-- No PRD, architecture, or epic docs found -->
+    </docs>
+    <code>
+      <artifact path="backend/services/agentic_text2sql_service.py" kind="service" symbol="AgenticText2SQLService" lines="1-200" reason="Core service containing SQL generation workflow. Need to add _format_conversation_context() method after line 136 and update _generate_sql_node() at lines 890-916 to pass context.">
+        - Line 101: self.chat_sessions = {} (in-memory session storage)
+        - Line 108-115: _get_chat_history(session_id) - retrieves history
+        - Line 117-135: _add_to_history(session_id, entry) - adds to history with 10-query limit
+        - Line 25-76: AgentState TypedDict definition (includes session_id field)
+        - Line 890-916: _generate_sql_node() - needs modification to format and pass context
+      </artifact>
+      <artifact path="backend/services/claude_service.py" kind="service" symbol="ClaudeService.generate_sql" lines="1-100" reason="Claude API integration. Need to add conversation_context parameter to generate_sql() method (line 215) and inject into system prompt (lines 248-276).">
+        - Line 22-48: BASE_LLM_INSTRUCTIONS - system prompt template
+        - Line 215: generate_sql() method signature - needs conversation_context parameter
+        - Line 248-276: System prompt construction - needs context injection logic
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        SQLAlchemy: 2.0.36 (database ORM)
+        Faker: 33.1.0 (test data generation)
+        Flask: 3.1.0 (web framework)
+        flask-cors: 5.0.0 (CORS handling)
+        anthropic: 0.40.0 (Claude API client)
+        langgraph: >=0.0.20 (agentic workflow orchestration)
+        python-dotenv: 1.0.1 (environment configuration)
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    1. Use existing in-memory self.chat_sessions dictionary (lines 101-135 in agentic_text2sql_service.py)
+    2. Context window: Last 5 queries only (configurable via max_entries parameter)
+    3. Token overhead: ~750 tokens per request (5 queries × 150 tokens) - acceptable
+    4. Session retention: 10 queries max per session (already implemented, line 130-133)
+    5. Handle edge cases gracefully:
+       - Empty history (first query in session)
+       - Failed queries (SQL generation or execution failed)
+       - Partial history (fewer than 5 queries)
+       - Long SQL queries (truncate to 200 chars in context to save tokens)
+    6. Maintain existing security validation (corp_id filtering must still work)
+    7. Preserve existing chart metadata generation functionality
+    8. Log context inclusion at INFO level for debugging
+  </constraints>
+
+  <interfaces>
+    <interface name="_format_conversation_context" kind="method" signature="def _format_conversation_context(self, session_id: str, max_entries: int = 5) -&gt; str" path="backend/services/agentic_text2sql_service.py">
+      NEW METHOD to implement after line 136.
+      Returns formatted markdown string with last N queries from session history.
+      Returns empty string if no history exists.
+    </interface>
+    <interface name="_generate_sql_node" kind="method" signature="def _generate_sql_node(self, state: AgentState) -&gt; AgentState" path="backend/services/agentic_text2sql_service.py:890-916">
+      EXISTING METHOD to modify.
+      Add conversation context retrieval and pass to claude_service.generate_sql().
+      Extract session_id from state, call _format_conversation_context(), pass result to generate_sql().
+    </interface>
+    <interface name="generate_sql" kind="method" signature="def generate_sql(self, natural_language_query, client_id, client_name=None, custom_schema=None, dataset_id=None, conversation_context=None)" path="backend/services/claude_service.py:215">
+      EXISTING METHOD to modify.
+      Add conversation_context parameter (optional str).
+      If provided, append to system_prompt after dataset-specific instructions and before visualization instructions.
+      Log context addition at INFO level.
+    </interface>
+    <interface name="_get_chat_history" kind="method" signature="def _get_chat_history(self, session_id: str) -&gt; List[Dict]" path="backend/services/agentic_text2sql_service.py:108-115">
+      EXISTING METHOD - use to retrieve history.
+      Returns list of previous query entries for given session.
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Per story Definition of Done (lines 449-459):
+      - Unit tests required for _format_conversation_context() method
+      - Integration test required for end-to-end context flow
+      - Performance benchmark required (context formatting &lt;200ms, total latency &lt;500ms)
+      - All 8 acceptance criteria must pass
+      - Manual testing checklist provided (lines 509-591) covering:
+        * Basic functionality verification
+        * All AC scenarios (3-8)
+        * Edge case testing (empty session, failed queries, truncation)
+        * Regression testing (existing features still work)
+        * Logging verification
+    </standards>
+    <locations>
+      Test files not found in repo.
+      Typical Python test locations:
+      - backend/tests/ directory (create if needed)
+      - backend/tests/test_agentic_text2sql_service.py (for context formatting unit tests)
+      - backend/tests/test_integration_conversation_context.py (for end-to-end integration test)
+    </locations>
+    <ideas>
+      <test id="test_format_context_empty_history" ac="AC1">
+        Test _format_conversation_context() with empty session_id returns empty string.
+      </test>
+      <test id="test_format_context_single_query" ac="AC1">
+        Test formatting with 1 previous query in history.
+      </test>
+      <test id="test_format_context_max_window" ac="AC7">
+        Test with 7 queries, verify only last 5 included in formatted output.
+      </test>
+      <test id="test_context_injection_logged" ac="AC2">
+        Mock claude_service.generate_sql(), verify conversation_context passed and logged.
+      </test>
+      <test id="test_basic_inheritance_2024" ac="AC3">
+        Integration test: Query 1 "sales trend 2024" → Query 2 "by month" → Verify SQL has fiscal_year=2024.
+      </test>
+      <test id="test_multi_level_drilldown" ac="AC4">
+        Integration test: 5-query sequence, verify filter inheritance at each level.
+      </test>
+      <test id="test_explicit_override" ac="AC5">
+        Integration test: Query 1 "2024 data" → Query 2 "show 2023 instead" → Verify 2023 used, 2024 discarded.
+      </test>
+      <test id="test_performance_context_formatting" ac="AC8">
+        Benchmark _format_conversation_context() with 5-query history, verify &lt;200ms.
+      </test>
+    </ideas>
+  </tests>
+</story-context>

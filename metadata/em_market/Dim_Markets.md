@@ -262,3 +262,4 @@ GROUP BY m.market_name, m.definition, parent.market_name;
 - Market definitions should be reviewed periodically for accuracy
 - Deprecated markets should be marked (consider adding `is_active` flag)
 
+
